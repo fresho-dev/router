@@ -3,38 +3,21 @@
   "version": "0.1.0",
   "description": "Type-safe route definitions with auto-generated clients and OpenAPI docs",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    },
-    "./hono": {
-      "types": "./dist/hono.d.ts",
-      "import": "./dist/hono.js"
-    },
-    "./standalone": {
-      "types": "./dist/standalone.d.ts",
-      "import": "./dist/standalone.js"
-    }
+    ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "tsc --project tsconfig.build.json",
     "test": "node --import tsx --test 'src/**/*.test.ts'",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "hono": "^4.6.0",
-    "zod": "^3.23.0"
-  },
   "devDependencies": {
-    "@hono/node-server": "^1.19.6",
     "@types/node": "^22.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   },
   "files": [
-    "dist"
+    "src"
   ]
 }

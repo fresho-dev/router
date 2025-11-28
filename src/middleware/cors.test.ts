@@ -17,7 +17,7 @@ describe('CORS Middleware', () => {
     nextResponse = new Response('test response');
     context = {
       request: new Request('http://example.com/test'),
-      params: { query: {}, body: {} },
+      params: { path: {}, query: {}, body: {} },
       env: {},
     };
   });

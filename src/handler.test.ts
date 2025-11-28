@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { route, router } from './index.js';
-import { createHandler } from './standalone.js';
+import { createHandler } from './handler.js';
+import type { MiddlewareContext, MiddlewareNext } from './middleware.js';
 
 describe('standalone router', () => {
   describe('createHandler()', () => {
@@ -179,7 +180,7 @@ describe('standalone router', () => {
             method: 'get',
             path: '/test',
             query: { name: 'string' },
-            handler: async (request, { query }) => Response.json({ name: query.name }),
+            handler: async (c) => Response.json({ name: c.params.query.name }),
           }),
         })
       );
@@ -196,7 +197,7 @@ describe('standalone router', () => {
             method: 'get',
             path: '/test',
             query: { count: 'number' },
-            handler: async (request, { query }) => Response.json({ count: query.count }),
+            handler: async (c) => Response.json({ count: c.params.query.count }),
           }),
         })
       );
@@ -213,7 +214,7 @@ describe('standalone router', () => {
             method: 'get',
             path: '/test',
             query: { active: 'boolean' },
-            handler: async (request, { query }) => Response.json({ active: query.active }),
+            handler: async (c) => Response.json({ active: c.params.query.active }),
           }),
         })
       );
@@ -230,7 +231,7 @@ describe('standalone router', () => {
             method: 'get',
             path: '/test',
             query: { name: 'string?' },
-            handler: async (request, { query }) => Response.json({ name: query.name }),
+            handler: async (c) => Response.json({ name: c.params.query.name }),
           }),
         })
       );
@@ -247,7 +248,7 @@ describe('standalone router', () => {
             method: 'get',
             path: '/test',
             query: { name: 'string?' },
-            handler: async (request, { query }) => Response.json({ query }),
+            handler: async (c) => Response.json({ query: c.params.query }),
           }),
         })
       );
@@ -300,7 +301,7 @@ describe('standalone router', () => {
             method: 'post',
             path: '/test',
             body: { name: 'string' },
-            handler: async (request, { body }) => Response.json({ name: body.name }),
+            handler: async (c) => Response.json({ name: c.params.body.name }),
           }),
         })
       );
@@ -431,7 +432,7 @@ describe('standalone router', () => {
             method: 'get',
             path: '/test',
             query: {},
-            handler: async (request, { query }) => Response.json({ query }),
+            handler: async (c) => Response.json({ query: c.params.query }),
           }),
         })
       );
@@ -448,7 +449,7 @@ describe('standalone router', () => {
             method: 'get',
             path: '/test',
             query: { q: 'string' },
-            handler: async (request, { query }) => Response.json({ q: query.q }),
+            handler: async (c) => Response.json({ q: c.params.query.q }),
           }),
         })
       );
@@ -467,7 +468,7 @@ describe('standalone router', () => {
             method: 'get',
             path: '/test',
             query: { name: 'string' },
-            handler: async (request, { query }) => Response.json({ name: query.name }),
+            handler: async (c) => Response.json({ name: c.params.query.name }),
           }),
         })
       );
@@ -532,16 +533,16 @@ describe('standalone router', () => {
       assert.strictEqual(handlerCalled, false);
     });
 
-    it('passes env and ctx to handler', async () => {
+    it('passes env and ctx to handler via context', async () => {
       const handler = createHandler(
         router('', {
           test: route({
             method: 'get',
             path: '/test',
-            handler: async (request, params, env, ctx) =>
+            handler: async (c) =>
               Response.json({
-                hasEnv: env !== undefined,
-                hasCtx: ctx !== undefined,
+                hasEnv: c.env !== undefined,
+                hasCtx: c.executionCtx !== undefined,
               }),
           }),
         })
@@ -553,6 +554,250 @@ describe('standalone router', () => {
       const res = await handler(new Request('http://localhost/test'), mockEnv, mockCtx);
       assert.strictEqual(res.status, 200);
       assert.deepStrictEqual(await res.json(), { hasEnv: true, hasCtx: true });
+    });
+  });
+
+  describe('path parameters', () => {
+    it('extracts single path parameter', async () => {
+      const handler = createHandler(
+        router('', {
+          getBook: route({
+            method: 'get',
+            path: '/books/:id',
+            handler: async (c) => Response.json({ bookId: c.params.path.id }),
+          }),
+        })
+      );
+
+      const res = await handler(new Request('http://localhost/books/123'));
+      assert.strictEqual(res.status, 200);
+      assert.deepStrictEqual(await res.json(), { bookId: '123' });
+    });
+
+    it('extracts multiple path parameters', async () => {
+      const handler = createHandler(
+        router('', {
+          getChapter: route({
+            method: 'get',
+            path: '/books/:bookId/chapters/:chapterId',
+            handler: async (c) =>
+              Response.json({ bookId: c.params.path.bookId, chapterId: c.params.path.chapterId }),
+          }),
+        })
+      );
+
+      const res = await handler(new Request('http://localhost/books/abc/chapters/42'));
+      assert.strictEqual(res.status, 200);
+      assert.deepStrictEqual(await res.json(), { bookId: 'abc', chapterId: '42' });
+    });
+
+    it('path params work alongside query params', async () => {
+      const handler = createHandler(
+        router('', {
+          getBook: route({
+            method: 'get',
+            path: '/books/:id',
+            query: { format: 'string?' },
+            handler: async (c) =>
+              Response.json({ bookId: c.params.path.id, format: c.params.query.format ?? 'json' }),
+          }),
+        })
+      );
+
+      const res = await handler(new Request('http://localhost/books/123?format=xml'));
+      assert.strictEqual(res.status, 200);
+      assert.deepStrictEqual(await res.json(), { bookId: '123', format: 'xml' });
+    });
+
+    it('extracts path param with file extension suffix', async () => {
+      const handler = createHandler(
+        router('', {
+          getFile: route({
+            method: 'get',
+            path: '/files/:name.pdf',
+            handler: async (c) => Response.json({ name: c.params.path.name }),
+          }),
+        })
+      );
+
+      const res = await handler(new Request('http://localhost/files/document.pdf'));
+      assert.strictEqual(res.status, 200);
+      assert.deepStrictEqual(await res.json(), { name: 'document' });
+    });
+
+    it('does not match wrong extension', async () => {
+      const handler = createHandler(
+        router('', {
+          getFile: route({
+            method: 'get',
+            path: '/files/:name.pdf',
+            handler: async () => Response.json({ ok: true }),
+          }),
+        })
+      );
+
+      const res = await handler(new Request('http://localhost/files/document.txt'));
+      assert.strictEqual(res.status, 404);
+    });
+
+    it('handles multiple params with extensions', async () => {
+      const handler = createHandler(
+        router('', {
+          getAudio: route({
+            method: 'get',
+            path: '/audio/:artist-:track.mp3',
+            handler: async (c) =>
+              Response.json({ artist: c.params.path.artist, track: c.params.path.track }),
+          }),
+        })
+      );
+
+      const res = await handler(new Request('http://localhost/audio/beatles-yesterday.mp3'));
+      assert.strictEqual(res.status, 200);
+      assert.deepStrictEqual(await res.json(), { artist: 'beatles', track: 'yesterday' });
+    });
+
+    it('escapes special regex characters in path literals', async () => {
+      const handler = createHandler(
+        router('', {
+          getFile: route({
+            method: 'get',
+            path: '/files/:name.tar.gz',
+            handler: async (c) => Response.json({ name: c.params.path.name }),
+          }),
+        })
+      );
+
+      // Should match literal .tar.gz
+      const res = await handler(new Request('http://localhost/files/archive.tar.gz'));
+      assert.strictEqual(res.status, 200);
+      assert.deepStrictEqual(await res.json(), { name: 'archive' });
+
+      // Should NOT match .tarXgz (unescaped . would match any char)
+      const res2 = await handler(new Request('http://localhost/files/archiveXtarXgz'));
+      assert.strictEqual(res2.status, 404);
+    });
+  });
+
+
+  describe('middleware to handler context passing', () => {
+    // Define context types for type-safe middleware-to-handler communication.
+    interface UserContext {
+      user: { id: string; name: string };
+    }
+
+    interface PermissionsContext {
+      user: { id: string };
+      permissions: string[];
+    }
+
+    interface DbContext {
+      dbConnection: string;
+    }
+
+    it('passes middleware-added properties to handler via context (typed)', async () => {
+      const authMiddleware = async (ctx: MiddlewareContext, next: MiddlewareNext) => {
+        ctx.user = { id: '123', name: 'Alice' };
+        return next();
+      };
+
+      const handler = createHandler(
+        router(
+          '',
+          {
+            // Use route.ctx<T>() for clean context typing.
+            profile: route.ctx<UserContext>()({
+              method: 'get',
+              path: '/profile',
+              handler: async (c) => {
+                // c.user is fully typed - no casting needed.
+                return Response.json({ userId: c.user.id, userName: c.user.name });
+              },
+            }),
+          },
+          [authMiddleware]
+        )
+      );
+
+      const res = await handler(new Request('http://localhost/profile'));
+      assert.strictEqual(res.status, 200);
+      assert.deepStrictEqual(await res.json(), { userId: '123', userName: 'Alice' });
+    });
+
+    it('passes multiple middleware properties to handler (typed)', async () => {
+      const authMiddleware = async (ctx: MiddlewareContext, next: MiddlewareNext) => {
+        ctx.user = { id: '123' };
+        return next();
+      };
+
+      const permissionsMiddleware = async (ctx: MiddlewareContext, next: MiddlewareNext) => {
+        ctx.permissions = ['read', 'write'];
+        return next();
+      };
+
+      const handler = createHandler(
+        router(
+          '',
+          {
+            data: route.ctx<PermissionsContext>()({
+              method: 'get',
+              path: '/data',
+              handler: async (c) => {
+                // Both user and permissions are typed.
+                return Response.json({
+                  userId: c.user.id,
+                  canRead: c.permissions.includes('read'),
+                  canWrite: c.permissions.includes('write'),
+                });
+              },
+            }),
+          },
+          [authMiddleware, permissionsMiddleware]
+        )
+      );
+
+      const res = await handler(new Request('http://localhost/data'));
+      assert.strictEqual(res.status, 200);
+      assert.deepStrictEqual(await res.json(), {
+        userId: '123',
+        canRead: true,
+        canWrite: true,
+      });
+    });
+
+    it('context includes env alongside middleware properties (typed)', async () => {
+      const dbMiddleware = async (ctx: MiddlewareContext, next: MiddlewareNext) => {
+        ctx.dbConnection = 'connected';
+        return next();
+      };
+
+      const handler = createHandler(
+        router(
+          '',
+          {
+            status: route.ctx<DbContext>()({
+              method: 'get',
+              path: '/status',
+              handler: async (c) => {
+                // dbConnection is typed, env still needs casting (it's always unknown).
+                const env = c.env as { API_KEY: string };
+                return Response.json({
+                  apiKey: env.API_KEY,
+                  dbStatus: c.dbConnection,
+                });
+              },
+            }),
+          },
+          [dbMiddleware]
+        )
+      );
+
+      const res = await handler(new Request('http://localhost/status'), { API_KEY: 'secret123' });
+      assert.strictEqual(res.status, 200);
+      assert.deepStrictEqual(await res.json(), {
+        apiKey: 'secret123',
+        dbStatus: 'connected',
+      });
     });
   });
 });

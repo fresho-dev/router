@@ -17,7 +17,7 @@ describe('Authentication Middleware', () => {
     nextResponse = new Response('protected content');
     context = {
       request: new Request('http://example.com/test'),
-      params: { query: {}, body: {} },
+      params: { path: {}, query: {}, body: {} },
       env: {},
     };
   });

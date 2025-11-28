@@ -52,15 +52,17 @@ export function generateDocs(config: {
       },
     };
 
-    // Add query parameters.
+    // Add query parameters (only primitive types supported in query strings).
     if (route.query) {
       const querySchema = route.query as SchemaDefinition;
-      operation.parameters = Object.entries(querySchema).map(([name, type]) => ({
-        name,
-        in: 'query',
-        required: !type.endsWith('?'),
-        schema: { type: type.replace('?', '') },
-      }));
+      operation.parameters = Object.entries(querySchema)
+        .filter(([, type]) => typeof type === 'string')
+        .map(([name, type]) => ({
+          name,
+          in: 'query',
+          required: !(type as string).endsWith('?'),
+          schema: { type: (type as string).replace('?', '').replace('[]', '') },
+        }));
     }
 
     // Add request body.
@@ -73,10 +75,16 @@ export function generateDocs(config: {
             schema: {
               type: 'object',
               properties: Object.fromEntries(
-                Object.entries(bodySchema).map(([name, type]) => [name, { type: type.replace('?', '') }])
+                Object.entries(bodySchema).map(([name, type]) => {
+                  if (typeof type === 'string') {
+                    return [name, { type: type.replace('?', '').replace('[]', '') }];
+                  }
+                  // Nested object - simplified representation.
+                  return [name, { type: 'object' }];
+                })
               ),
               required: Object.entries(bodySchema)
-                .filter(([, type]) => !type.endsWith('?'))
+                .filter(([, type]) => typeof type === 'string' && !type.endsWith('?'))
                 .map(([name]) => name),
             },
           },

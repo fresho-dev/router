@@ -10,6 +10,25 @@ import type { Middleware, MiddlewareContext } from '../middleware.js';
 // Error Handler
 // =============================================================================
 
+/**
+ * Extracts HTTP status code from an error object.
+ *
+ * Supports errors with `status` or `statusCode` properties (common patterns
+ * in frameworks like Express, Koa, Hono, and custom HTTP error classes).
+ */
+function getErrorStatus(error: unknown): number {
+  if (typeof error !== 'object' || error === null) {
+    return 500;
+  }
+  if ('status' in error && typeof error.status === 'number') {
+    return error.status;
+  }
+  if ('statusCode' in error && typeof error.statusCode === 'number') {
+    return error.statusCode;
+  }
+  return 500;
+}
+
 /** Error handler middleware configuration. */
 export interface ErrorHandlerOptions {
   /** Custom error logger. */
@@ -52,7 +71,7 @@ export function errorHandler(options: ErrorHandlerOptions = {}): Middleware {
 
       // Default error response
       const message = options.expose ? err.message : 'Internal Server Error';
-      const status = (err as any).status || (err as any).statusCode || 500;
+      const status = getErrorStatus(error);
 
       const errorBody = {
         error: message,
@@ -204,14 +223,30 @@ export interface RateLimitStore {
   reset(key: string): Promise<void>;
 }
 
-/** In-memory rate limit store. */
+/** In-memory rate limit store with periodic cleanup of expired entries. */
 export class MemoryRateLimitStore implements RateLimitStore {
   private counts = new Map<string, { count: number; resetAt: number }>();
+  private lastCleanup = Date.now();
 
-  constructor(private windowMs: number) {}
+  /** Interval between cleanups (default: 60 seconds). */
+  private readonly cleanupIntervalMs: number;
+
+  constructor(
+    private windowMs: number,
+    options?: { cleanupIntervalMs?: number }
+  ) {
+    // Default cleanup interval is the window duration or 60 seconds, whichever is larger.
+    this.cleanupIntervalMs = options?.cleanupIntervalMs ?? Math.max(windowMs, 60_000);
+  }
 
   async increment(key: string): Promise<number> {
     const now = Date.now();
+
+    // Periodic cleanup to prevent memory leaks.
+    if (now - this.lastCleanup > this.cleanupIntervalMs) {
+      this.cleanup(now);
+    }
+
     const record = this.counts.get(key);
 
     if (!record || now > record.resetAt) {
@@ -232,6 +267,21 @@ export class MemoryRateLimitStore implements RateLimitStore {
 
   async reset(key: string): Promise<void> {
     this.counts.delete(key);
+  }
+
+  /** Removes all expired entries from the store. */
+  private cleanup(now: number): void {
+    for (const [key, record] of this.counts) {
+      if (now > record.resetAt) {
+        this.counts.delete(key);
+      }
+    }
+    this.lastCleanup = now;
+  }
+
+  /** Returns the current number of tracked keys (useful for testing). */
+  get size(): number {
+    return this.counts.size;
   }
 }
 

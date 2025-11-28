@@ -214,6 +214,65 @@ describe('http-client', () => {
         await client.del();
         assert.strictEqual((fetchMock.mock.calls[4].arguments[1] as RequestInit).method, 'DELETE');
       });
+
+      it('substitutes single path parameter', async (t) => {
+        const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
+
+        const client = router('', {
+          getUser: route({ method: 'get', path: '/users/:id' }),
+        }).httpClient();
+        client.configure({ baseUrl: 'http://test.com' });
+
+        await client.getUser({ path: { id: '123' } });
+
+        const url = fetchMock.mock.calls[0].arguments[0] as string;
+        assert.strictEqual(url, 'http://test.com/users/123');
+      });
+
+      it('substitutes multiple path parameters', async (t) => {
+        const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
+
+        const client = router('', {
+          getPost: route({ method: 'get', path: '/users/:userId/posts/:postId' }),
+        }).httpClient();
+        client.configure({ baseUrl: 'http://test.com' });
+
+        await client.getPost({ path: { userId: 'u1', postId: 'p2' } });
+
+        const url = fetchMock.mock.calls[0].arguments[0] as string;
+        assert.strictEqual(url, 'http://test.com/users/u1/posts/p2');
+      });
+
+      it('substitutes path params with query params', async (t) => {
+        const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
+
+        const client = router('', {
+          getUser: route({ method: 'get', path: '/users/:id', query: { include: 'string?' } }),
+        }).httpClient();
+        client.configure({ baseUrl: 'http://test.com' });
+
+        await client.getUser({ path: { id: '456' }, query: { include: 'posts' } });
+
+        const url = fetchMock.mock.calls[0].arguments[0] as string;
+        assert.ok(url.startsWith('http://test.com/users/456'));
+        assert.ok(url.includes('include=posts'));
+      });
+
+      it('works with nested routers and path params', async (t) => {
+        const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
+
+        const users = router('/users', {
+          getOne: route({ method: 'get', path: '/:id' }),
+        });
+        const client = router('/api', { users }).httpClient();
+        client.configure({ baseUrl: 'http://test.com' });
+
+        await client.users.getOne({ path: { id: '789' } });
+
+        const url = fetchMock.mock.calls[0].arguments[0] as string;
+        assert.strictEqual(url, 'http://test.com/api/users/789');
+      });
     });
+
   });
 });

@@ -51,15 +51,29 @@ function populateHttpClientRoutes<T extends RouterRoutes>(
   }
 }
 
+/** Substitutes path parameters in a route path. */
+function substitutePath(path: string, params: Record<string, string> = {}): string {
+  return path.replace(/:(\w+)/g, (_, name) => {
+    const value = params[name];
+    if (value === undefined) {
+      throw new Error(`Missing path parameter: ${name}`);
+    }
+    return encodeURIComponent(value);
+  });
+}
+
 /** Creates an HTTP fetch function for a route. */
 function createHttpRouteFetcher(
   routeDef: RouteDefinition,
   basePath: string,
   sharedConfig: { current: HttpClientConfig }
-): (options?: HttpFetchOptions<unknown, unknown>) => Promise<unknown> {
-  return async (options: HttpFetchOptions<unknown, unknown> = {}) => {
+): (options?: HttpFetchOptions<unknown, unknown, unknown>) => Promise<unknown> {
+  return async (options: HttpFetchOptions<unknown, unknown, unknown> = {}) => {
     const config = sharedConfig.current;
-    const fullPath = basePath + routeDef.path;
+
+    // Substitute path parameters before building URL.
+    const pathParams = (options.path ?? {}) as Record<string, string>;
+    const fullPath = substitutePath(basePath + routeDef.path, pathParams);
 
     // Build URL (relative if no baseUrl configured).
     const baseUrl =
@@ -94,6 +108,7 @@ function createHttpRouteFetcher(
 
     // Use pathname + search for relative URLs when no baseUrl.
     const fetchUrl = config.baseUrl ? url.toString() : url.pathname + url.search;
+
     const response = await fetch(fetchUrl, init);
 
     if (!response.ok) {

@@ -2,22 +2,23 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import { createServer, type Server } from 'node:http';
 import { route, router } from './index.js';
-import { createHandler } from './standalone.js';
+import { createHandler } from './handler.js';
 
 describe('integration tests', () => {
   // Define routes for testing.
+  // Handlers return plain objects (auto-wrapped in Response.json) for type inference.
   const api = router('/api', {
     health: route({
       method: 'get',
       path: '/health',
-      handler: async () => Response.json({ status: 'ok' }),
+      handler: async () => ({ status: 'ok' }),
     }),
 
     echo: route({
       method: 'get',
       path: '/echo',
       query: { message: 'string' },
-      handler: async (req, { query }) => Response.json({ message: query.message }),
+      handler: async (c) => ({ message: c.params.query.message }),
     }),
 
     users: router('/users', {
@@ -25,10 +26,10 @@ describe('integration tests', () => {
         method: 'get',
         path: '',
         query: { limit: 'number?' },
-        handler: async (req, { query }) => {
-          const limit = query.limit ?? 10;
+        handler: async (c) => {
+          const limit = c.params.query.limit ?? 10;
           const users = Array.from({ length: limit }, (_, i) => ({ id: i + 1, name: `User ${i + 1}` }));
-          return Response.json({ users });
+          return { users };
         },
       }),
 
@@ -36,7 +37,7 @@ describe('integration tests', () => {
         method: 'post',
         path: '',
         body: { name: 'string', email: 'string' },
-        handler: async (req, { body }) => Response.json({ id: 1, name: body.name, email: body.email }),
+        handler: async (c) => ({ id: 1, name: c.params.body.name, email: c.params.body.email }),
       }),
     }),
   });

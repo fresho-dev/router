@@ -26,7 +26,7 @@ describe('Common Middleware', () => {
     nextResponse = new Response('test response');
     context = {
       request: new Request('http://example.com/test'),
-      params: { query: {}, body: {} },
+      params: { path: {}, query: {}, body: {} },
       env: {},
     };
   });
@@ -412,6 +412,26 @@ describe('Common Middleware', () => {
 
       const count = await store.increment('key1');
       assert.strictEqual(count, 1);
+    });
+
+    it('should cleanup expired entries to prevent memory leaks', async () => {
+      // Use very short window and cleanup interval for testing.
+      const store = new MemoryRateLimitStore(50, { cleanupIntervalMs: 50 });
+
+      // Add entries for multiple keys.
+      await store.increment('key1');
+      await store.increment('key2');
+      await store.increment('key3');
+      assert.strictEqual(store.size, 3);
+
+      // Wait for entries to expire and cleanup interval to pass.
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Trigger cleanup by making a new request.
+      await store.increment('key4');
+
+      // Expired entries should be cleaned up, only key4 should remain.
+      assert.strictEqual(store.size, 1);
     });
   });
 

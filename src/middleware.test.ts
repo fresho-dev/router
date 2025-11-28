@@ -20,7 +20,7 @@ describe('Middleware', () => {
   beforeEach(() => {
     context = {
       request: new Request('http://example.com/test'),
-      params: { query: {}, body: {} },
+      params: { path: {}, query: {}, body: {} },
       env: {},
     };
   });

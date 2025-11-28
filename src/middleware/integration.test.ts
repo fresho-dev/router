@@ -4,10 +4,10 @@
 
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { router, route } from './core.js';
-import { createHandler } from './standalone.js';
-import { cors, basicAuth, errorHandler, logger, requestId } from './middleware/index.js';
-import type { Middleware } from './middleware.js';
+import { router, route } from '../core.js';
+import { createHandler } from '../handler.js';
+import { cors, basicAuth, errorHandler, logger, requestId } from './index.js';
+import type { Middleware } from '../middleware.js';
 
 describe('Middleware Integration', () => {
   describe('Router with Middleware', () => {
@@ -83,7 +83,7 @@ describe('Middleware Integration', () => {
           users: route({
             method: 'get',
             path: '/users',
-            handler: async (req, params, env, ctx) => {
+            handler: async (c) => {
               order.push('handler');
               return Response.json({ version: 'v1' });
             },
@@ -187,9 +187,8 @@ describe('Middleware Integration', () => {
           users: route({
             method: 'get',
             path: '/users',
-            handler: async (req, params, env, ctx) => {
-              // Basic auth middleware sets the user, but it's in middleware context
-              // not directly accessible in handler - that's by design
+            handler: async (c) => {
+              // Basic auth middleware sets the user, accessible via context
               return Response.json({ admin: true });
             },
           }),
@@ -504,9 +503,9 @@ describe('Middleware Integration', () => {
               name: 'string',
               age: 'number',
             },
-            handler: async (req, params) => {
+            handler: async (c) => {
               events.push('handler');
-              return Response.json(params.body);
+              return Response.json(c.params.body);
             },
           }),
         },

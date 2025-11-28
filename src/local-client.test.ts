@@ -48,7 +48,7 @@ describe('local-client', () => {
           method: 'get',
           path: '/test',
           query: { name: 'string' },
-          handler: async (req, { query }) => Response.json({ name: query.name }),
+          handler: async (c) => Response.json({ name: c.params.query.name }),
         }),
       }).localClient();
 
@@ -62,7 +62,7 @@ describe('local-client', () => {
           method: 'post',
           path: '/test',
           body: { name: 'string' },
-          handler: async (req, { body }) => Response.json({ name: body.name }),
+          handler: async (c) => Response.json({ name: c.params.body.name }),
         }),
       }).localClient();
 
@@ -104,7 +104,7 @@ describe('local-client', () => {
         test: route({
           method: 'get',
           path: '/test',
-          handler: async (req, params, env) => Response.json({ hasEnv: env !== undefined }),
+          handler: async (c) => Response.json({ hasEnv: c.env !== undefined }),
         }),
       }).localClient();
 
@@ -117,7 +117,7 @@ describe('local-client', () => {
         test: route({
           method: 'get',
           path: '/test',
-          handler: async (req, params, env, ctx) => Response.json({ hasCtx: ctx !== undefined }),
+          handler: async (c) => Response.json({ hasCtx: c.executionCtx !== undefined }),
         }),
       }).localClient();
 
@@ -131,8 +131,8 @@ describe('local-client', () => {
         test: route({
           method: 'get',
           path: '/test',
-          handler: async (req, params, env, ctx) =>
-            Response.json({ hasEnv: env !== undefined, hasCtx: ctx !== undefined }),
+          handler: async (c) =>
+            Response.json({ hasEnv: c.env !== undefined, hasCtx: c.executionCtx !== undefined }),
         }),
       }).localClient();
 
@@ -148,7 +148,7 @@ describe('local-client', () => {
         test: route({
           method: 'get',
           path: '/test',
-          handler: async (req, params, env) => Response.json({ db: (env as Record<string, string>).DB }),
+          handler: async (c) => Response.json({ db: (c.env as Record<string, string>).DB }),
         }),
       }).localClient();
 
@@ -173,8 +173,8 @@ describe('local-client', () => {
           method: 'get',
           path: '/test',
           query: { id: 'string' },
-          handler: async (req) => {
-            capturedUrl = req.url;
+          handler: async (c) => {
+            capturedUrl = c.request.url;
             return Response.json({});
           },
         }),
@@ -191,8 +191,8 @@ describe('local-client', () => {
         test: route({
           method: 'post',
           path: '/test',
-          handler: async (req) => {
-            capturedMethod = req.method;
+          handler: async (c) => {
+            capturedMethod = c.request.method;
             return Response.json({});
           },
         }),
@@ -200,6 +200,93 @@ describe('local-client', () => {
 
       await client.test();
       assert.strictEqual(capturedMethod, 'POST');
+    });
+
+    it('passes path params to handler', async () => {
+      const api = router('/api', {
+        users: router('/users', {
+          get: route({
+            method: 'get',
+            path: '/:id',
+            handler: async (c) => ({ userId: c.params.path.id }),
+          }),
+        }),
+      });
+
+      const client = api.localClient();
+      const result = await client.users.get({ path: { id: '123' } }) as { userId: string };
+      assert.strictEqual(result.userId, '123');
+    });
+
+    it('passes multiple path params to handler', async () => {
+      const api = router('/api', {
+        posts: route({
+          method: 'get',
+          path: '/users/:userId/posts/:postId',
+          handler: async (c) => ({
+            userId: c.params.path.userId,
+            postId: c.params.path.postId,
+          }),
+        }),
+      });
+
+      const client = api.localClient();
+      const result = await client.posts({ path: { userId: 'u1', postId: 'p42' } }) as { userId: string; postId: string };
+      assert.strictEqual(result.userId, 'u1');
+      assert.strictEqual(result.postId, 'p42');
+    });
+
+    it('throws when missing required path param', async () => {
+      const api = router('/api', {
+        users: route({
+          method: 'get',
+          path: '/users/:id',
+          handler: async () => ({}),
+        }),
+      });
+
+      const client = api.localClient();
+      await assert.rejects(
+        () => client.users({ path: {} } as any),
+        /Missing path parameter: id/
+      );
+    });
+
+    it('substitutes path params into synthetic request URL', async () => {
+      let capturedUrl = '';
+      const api = router('/api', {
+        users: route({
+          method: 'get',
+          path: '/users/:id/profile' as const,
+          handler: async (c) => {
+            capturedUrl = c.request.url;
+            return {};
+          },
+        }),
+      });
+
+      const client = api.localClient();
+      await client.users({ path: { id: 'abc123' } });
+      assert.ok(capturedUrl.includes('/api/users/abc123/profile'));
+    });
+
+    it('works with path params and query params together', async () => {
+      const api = router('/api', {
+        posts: route({
+          method: 'get',
+          path: '/users/:userId/posts' as const,
+          query: { limit: 'number?' },
+          handler: async (c) => ({
+            userId: c.params.path.userId,
+            limit: c.params.query.limit ?? 10,
+          }),
+        }),
+      });
+
+      const client = api.localClient();
+      const result = await client.posts({ path: { userId: 'u1' }, query: { limit: 5 } }) as { userId: string; limit: number };
+      assert.strictEqual(result.userId, 'u1');
+      assert.strictEqual(result.limit, 5);
     });
   });
 
@@ -214,16 +301,16 @@ describe('local-client', () => {
             method: 'get',
             path: '',
             query: { limit: 'number' },
-            handler: async (req, { query }) => {
-              const items = Array.from({ length: query.limit }, (_, i) => i);
-              return Response.json({ items });
+            handler: async (c) => {
+              const items = Array.from({ length: c.params.query.limit }, (_, i) => i);
+              return { items };
             },
           }),
         }),
       });
 
       const client = api.localClient();
-      const result = (await client.users.list({ query: { limit: 3 } })) as { items: number[] };
+      const result = await client.users.list({ query: { limit: 3 } }) as { items: number[] };
       assert.deepStrictEqual(result.items, [0, 1, 2]);
     });
 
@@ -234,10 +321,10 @@ describe('local-client', () => {
             method: 'get',
             path: '',
             query: { limit: 'number?' },
-            handler: async (req, { query }) => {
-              const limit = query.limit ?? 10;
+            handler: async (c) => {
+              const limit = c.params.query.limit ?? 10;
               const items = Array.from({ length: limit }, (_, i) => i);
-              return Response.json({ items, hadDefault: query.limit === undefined });
+              return { items, hadDefault: c.params.query.limit === undefined };
             },
           }),
         }),
@@ -245,14 +332,11 @@ describe('local-client', () => {
 
       const client = api.localClient();
 
-      const withParam = (await client.users.list({ query: { limit: 3 } })) as {
-        items: number[];
-        hadDefault: boolean;
-      };
+      const withParam = await client.users.list({ query: { limit: 3 } }) as { items: number[]; hadDefault: boolean };
       assert.deepStrictEqual(withParam.items, [0, 1, 2]);
       assert.strictEqual(withParam.hadDefault, false);
 
-      const withoutParam = (await client.users.list()) as { items: number[]; hadDefault: boolean };
+      const withoutParam = await client.users.list() as { items: number[]; hadDefault: boolean };
       assert.strictEqual(withoutParam.items.length, 10);
       assert.strictEqual(withoutParam.hadDefault, true);
     });
@@ -264,20 +348,17 @@ describe('local-client', () => {
             method: 'get',
             path: '/search',
             query: { q: 'string' },
-            handler: async (req, { query }) => {
-              const upper = query.q.toUpperCase();
-              const len = query.q.length;
-              return Response.json({ upper, len });
+            handler: async (c) => {
+              const upper = c.params.query.q.toUpperCase();
+              const len = c.params.query.q.length;
+              return { upper, len };
             },
           }),
         }),
       });
 
       const client = api.localClient();
-      const result = (await client.items.search({ query: { q: 'hello' } })) as {
-        upper: string;
-        len: number;
-      };
+      const result = await client.items.search({ query: { q: 'hello' } }) as { upper: string; len: number };
       assert.strictEqual(result.upper, 'HELLO');
       assert.strictEqual(result.len, 5);
     });
@@ -289,16 +370,16 @@ describe('local-client', () => {
             method: 'get',
             path: '',
             query: { enabled: 'boolean' },
-            handler: async (req, { query }) => {
-              const status = query.enabled ? 'on' : 'off';
-              return Response.json({ status });
+            handler: async (c) => {
+              const status = c.params.query.enabled ? 'on' : 'off';
+              return { status };
             },
           }),
         }),
       });
 
       const client = api.localClient();
-      const result = (await client.config.get({ query: { enabled: true } })) as { status: string };
+      const result = await client.config.get({ query: { enabled: true } }) as { status: string };
       assert.strictEqual(result.status, 'on');
     });
 
@@ -310,10 +391,10 @@ describe('local-client', () => {
               method: 'post',
               path: '',
               body: { name: 'string', age: 'number' },
-              handler: async (req, { body }) => {
-                const greeting = `Hello ${body.name}`;
-                const nextAge = body.age + 1;
-                return Response.json({ greeting, nextAge });
+              handler: async (c) => {
+                const greeting = `Hello ${c.params.body.name}`;
+                const nextAge = c.params.body.age + 1;
+                return { greeting, nextAge };
               },
             }),
           }),
@@ -321,10 +402,7 @@ describe('local-client', () => {
       });
 
       const client = api.localClient();
-      const result = (await client.v1.users.create({ body: { name: 'Alice', age: 30 } })) as {
-        greeting: string;
-        nextAge: number;
-      };
+      const result = await client.v1.users.create({ body: { name: 'Alice', age: 30 } }) as { greeting: string; nextAge: number };
       assert.strictEqual(result.greeting, 'Hello Alice');
       assert.strictEqual(result.nextAge, 31);
     });
@@ -337,19 +415,19 @@ describe('local-client', () => {
             path: '/process',
             query: { multiplier: 'number' },
             body: { values: 'string' },
-            handler: async (req, { query, body }) => {
-              const repeated = body.values.repeat(query.multiplier);
-              return Response.json({ repeated });
+            handler: async (c) => {
+              const repeated = c.params.body.values.repeat(c.params.query.multiplier);
+              return { repeated };
             },
           }),
         }),
       });
 
       const client = api.localClient();
-      const result = (await client.data.process({
+      const result = await client.data.process({
         query: { multiplier: 3 },
         body: { values: 'ab' },
-      })) as { repeated: string };
+      }) as { repeated: string };
       assert.strictEqual(result.repeated, 'ababab');
     });
   });

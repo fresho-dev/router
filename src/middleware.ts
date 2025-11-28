@@ -52,7 +52,7 @@ import type { TypedParams, ExecutionContext } from './types.js';
  */
 export interface MiddlewareContext<Ext = {}> {
   request: Request;
-  params: TypedParams<unknown, unknown>;
+  params: TypedParams<unknown, unknown, Record<string, string>>;
   env?: unknown;
   ctx?: ExecutionContext;
   [key: string]: unknown;
