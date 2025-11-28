@@ -68,6 +68,10 @@ export type MiddlewareNext = () => Promise<Response>;
  *
  * @typeParam Ext - Custom context properties for type-hinting (default: {})
  *
+ * The context receives `Partial<Ext>` so middleware can add properties that
+ * don't exist yet. Downstream handlers using `route.ctx<Ext>()` will receive
+ * the full typed context after middleware has run.
+ *
  * @example
  * ```typescript
  * // Simple middleware without custom context
@@ -76,7 +80,7 @@ export type MiddlewareNext = () => Promise<Response>;
  *   return next();
  * };
  *
- * // Middleware with typed context
+ * // Middleware with typed context (adds properties)
  * interface AuthContext { user: User }
  * const auth: Middleware<AuthContext> = async (context, next) => {
  *   context.user = await authenticate(context.request);
@@ -85,7 +89,7 @@ export type MiddlewareNext = () => Promise<Response>;
  * ```
  */
 export type Middleware<Ext = {}> = (
-  context: MiddlewareContext<Ext> & Ext,
+  context: MiddlewareContext<Ext> & Partial<Ext>,
   next: MiddlewareNext
 ) => Promise<Response> | Response;
 

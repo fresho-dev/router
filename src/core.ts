@@ -119,10 +119,10 @@ route.ctx = function <Ext>() {
 
 
 /** Creates a composable router. */
-export function router<T extends RouterRoutes>(
+export function router<T extends RouterRoutes, M extends Middleware<unknown>[]>(
   basePath: string,
   routes: T,
-  middleware?: Middleware[]
+  middleware?: [...M]
 ): Router<T> {
   return {
     basePath,
