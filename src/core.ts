@@ -15,105 +15,37 @@ export function route<
   const Q extends SchemaDefinition,
   const B extends SchemaDefinition,
   R = unknown,
->(definition: RouteDefinition<P, Q, B, unknown, R, {}>): RouteDefinition<P, Q, B, unknown, R, {}> {
+>(definition: RouteDefinition<P, Q, B, R, {}>): RouteDefinition<P, Q, B, R, {}> {
   return definition;
 }
 
-/** Route builder with typed env, ready to accept context or definition. */
-interface RouteBuilderWithEnv<Env> {
-  /** Add typed middleware context extensions. */
-  ctx: <Ext>() => <
-    const P extends string,
-    const Q extends SchemaDefinition,
-    const B extends SchemaDefinition,
-    R = unknown,
-  >(definition: RouteDefinition<P, Q, B, Env, R, Ext>) => RouteDefinition<P, Q, B, Env, R, Ext>;
-
-  /** Create route with just env typing (no middleware context). */
-  <const P extends string, const Q extends SchemaDefinition, const B extends SchemaDefinition, R = unknown>(
-    definition: RouteDefinition<P, Q, B, Env, R, {}>
-  ): RouteDefinition<P, Q, B, Env, R, {}>;
-}
-
 /**
- * Creates a route with typed environment bindings.
+ * Creates a route with typed context.
  *
- * Use this to type `c.env` in your handlers (e.g., Cloudflare Workers bindings).
- * Can be chained with `.ctx<T>()` to also type middleware context extensions.
+ * Use this when you need typed access to env bindings and/or middleware-added properties.
  *
  * @example
  * ```typescript
- * interface Env {
- *   KV: KVNamespace;
- *   DB: D1Database;
- * }
- *
- * // Just env
- * const getData = route.env<Env>()({
- *   method: 'get',
- *   path: '/data',
- *   handler: async (c) => {
- *     const value = await c.env.KV.get('key'); // typed!
- *     return { value };
- *   },
- * });
- *
- * // Env + middleware context
- * interface AuthContext {
- *   user: { id: string };
- * }
- *
- * const profile = route.env<Env>().ctx<AuthContext>()({
- *   method: 'get',
- *   path: '/profile',
- *   handler: async (c) => {
- *     await c.env.DB.prepare('...').bind(c.user.id); // both typed!
- *   },
- * });
- * ```
- */
-route.env = function <Env>(): RouteBuilderWithEnv<Env> {
-  const builder = <
-    const P extends string,
-    const Q extends SchemaDefinition,
-    const B extends SchemaDefinition,
-    R = unknown,
-  >(definition: RouteDefinition<P, Q, B, Env, R, {}>): RouteDefinition<P, Q, B, Env, R, {}> => definition;
-
-  builder.ctx = function <Ext>() {
-    return <const P extends string, const Q extends SchemaDefinition, const B extends SchemaDefinition, R = unknown>(
-      definition: RouteDefinition<P, Q, B, Env, R, Ext>
-    ): RouteDefinition<P, Q, B, Env, R, Ext> => definition;
-  };
-
-  return builder as RouteBuilderWithEnv<Env>;
-};
-
-/**
- * Creates a route with typed middleware context extensions.
- *
- * Use this when middleware adds properties to the context that handlers need.
- * For typing env bindings, use `route.env<E>()` or `route.env<E>().ctx<C>()`.
- *
- * @example
- * ```typescript
- * interface AuthContext {
+ * interface AppContext {
+ *   env: { KV: KVNamespace; DB: D1Database };
  *   user: { id: string; name: string };
  * }
  *
- * const profile = route.ctx<AuthContext>()({
+ * const profile = route.ctx<AppContext>()({
  *   method: 'get',
  *   path: '/profile',
  *   handler: async (c) => {
- *     return { name: c.user.name }; // c.user is typed
+ *     c.env.KV;    // typed
+ *     c.user.name; // typed
+ *     return { name: c.user.name };
  *   },
  * });
  * ```
  */
-route.ctx = function <Ext>() {
+route.ctx = function <Ctx>() {
   return <const P extends string, const Q extends SchemaDefinition, const B extends SchemaDefinition, R = unknown>(
-    definition: RouteDefinition<P, Q, B, unknown, R, Ext>
-  ): RouteDefinition<P, Q, B, unknown, R, Ext> => definition;
+    definition: RouteDefinition<P, Q, B, R, Ctx>
+  ): RouteDefinition<P, Q, B, R, Ctx> => definition;
 };
 
 

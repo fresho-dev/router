@@ -20,7 +20,6 @@ export {
 export {
   type Method,
   type ExtractPathParams,
-  type TypedParams,
   type ExecutionContext,
   type Context,
   type TypedResponse,
@@ -63,7 +62,7 @@ export { generateDocs } from './docs.js';
 
 // Middleware types and utilities (implementations available via 'typed-routes/middleware').
 export type { Middleware, MiddlewareContext, MiddlewareNext } from './middleware.js';
-export { runMiddleware, compose, forMethods, forPaths, skipPaths } from './middleware.js';
+export { runMiddleware } from './middleware.js';
 
 // Streaming utilities.
 export { type SSEOptions, type SSEMessage, sseResponse, streamJsonLines } from './streaming.js';

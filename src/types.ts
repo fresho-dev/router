@@ -96,16 +96,6 @@ export type ExtractPathParams<T extends string> =
       : {}
     : {};
 
-/** Typed parameters passed to route handlers. */
-export interface TypedParams<Q, B, P extends string | Record<string, string> = Record<string, string>> {
-  /** URL path parameters (e.g., { id: '123' } for /books/:id). */
-  path: P extends string ? ExtractPathParams<P> : P;
-  /** Query string parameters. */
-  query: Q;
-  /** Request body. */
-  body: B;
-}
-
 /** Execution context for background tasks (Cloudflare Workers compatible). */
 export interface ExecutionContext {
   waitUntil(promise: Promise<unknown>): void;
@@ -113,58 +103,55 @@ export interface ExecutionContext {
 }
 
 /**
- * Unified context object passed to both middleware and handlers.
+ * Unified context object passed to handlers.
  *
- * Contains the request, validated params, runtime env, and middleware extensions.
+ * Contains the request, validated params (path, query, body), env, and middleware-added properties.
  *
  * @typeParam Q - Query parameter type
  * @typeParam B - Body type
  * @typeParam P - Path parameters (extracted from path string or Record<string, string>)
- * @typeParam Env - Environment bindings type (Cloudflare env, etc.)
- * @typeParam Ext - Custom properties added by middleware
+ * @typeParam Ctx - Context type including env and middleware-added properties
  *
  * @example
  * ```typescript
- * interface MyEnv {
- *   KV: KVNamespace;
- *   DB: D1Database;
- * }
- *
- * interface AuthContext {
+ * interface AppContext {
+ *   env: { KV: KVNamespace; DB: D1Database };
  *   user: { id: string; name: string };
  * }
  *
- * const handler = (c: Context<{ page?: number }, {}, '/users/:id', MyEnv, AuthContext>) => {
- *   c.request;           // Original Request
- *   c.params.path.id;    // Typed path param
- *   c.params.query.page; // Typed query param
- *   c.env.KV;            // Typed env binding
- *   c.user;              // From middleware (via Ext)
+ * const handler = (c: Context<{ page?: number }, {}, '/users/:id', AppContext>) => {
+ *   c.request;    // Original Request
+ *   c.path.id;    // Typed path param
+ *   c.query.page; // Typed query param
+ *   c.env.KV;     // Typed env binding
+ *   c.user;       // From middleware
  * };
  * ```
  */
-export interface Context<
+export type Context<
   Q = unknown,
   B = unknown,
   P extends string | Record<string, string> = Record<string, string>,
-  Env = unknown,
-  Ext = {},
-> {
+  Ctx = {},
+> = {
   /** The original Request (untouched). */
   request: Request;
 
-  /** Validated and typed parameters. */
-  params: TypedParams<Q, B, P>;
+  /** URL path parameters (e.g., { id: '123' } for /users/:id). */
+  path: P extends string ? ExtractPathParams<P> : P;
 
-  /** Runtime environment (Cloudflare env, or custom). */
-  env: Env;
+  /** Query string parameters. */
+  query: Q;
+
+  /** Request body. */
+  body: B;
 
   /** Execution context for background tasks (Cloudflare Workers). */
   executionCtx?: ExecutionContext;
 
-  /** Response (set by handler or middleware, used for transformations). */
-  res?: Response;
-}
+  /** Environment bindings (Cloudflare Workers, Deno, etc.). */
+  env: Ctx extends { env: infer E } ? E : unknown;
+} & Omit<Ctx, 'env'>;
 
 /**
  * Typed response wrapper that carries the response body type.
@@ -184,30 +171,34 @@ export type TypedResponse<T> = Response & { __responseType?: T };
 /**
  * Handler function with unified context argument and typed response.
  *
- * Receives a single Context object containing request, params, env, and middleware extensions.
+ * Receives a single Context object containing request, params, env, and middleware-added properties.
  * Returns either a raw Response, or a value that will be auto-wrapped in Response.json().
  *
  * @typeParam Q - Query parameter type
  * @typeParam B - Body type
  * @typeParam P - Path string for param extraction
- * @typeParam Env - Environment bindings type
  * @typeParam R - Response body type (inferred from return)
- * @typeParam Ext - Middleware extension properties
+ * @typeParam Ctx - Context type including env and middleware-added properties
  *
  * @example
  * ```typescript
- * const handler: TypedHandler<{ page: number }, {}, '/users/:id', MyEnv, User, { user: User }> = (c) => {
+ * interface AppContext {
+ *   env: { DB: D1Database };
+ *   user: { id: string };
+ * }
+ *
+ * const handler: TypedHandler<{ page: number }, {}, '/users/:id', User, AppContext> = (c) => {
  *   c.request;           // Original Request
- *   c.params.path.id;    // Typed path param
- *   c.params.query.page; // Typed query param
+ *   c.path.id;    // Typed path param
+ *   c.query.page; // Typed query param
  *   c.env.DB;            // Typed env binding
- *   c.user;              // From middleware (via Ext)
- *   return Response.json({ id: c.params.path.id });
+ *   c.user;              // From middleware
+ *   return Response.json({ id: c.path.id });
  * };
  * ```
  */
-export type TypedHandler<Q, B, P extends string = string, Env = unknown, R = unknown, Ext = {}> = (
-  context: Context<Q, B, P, Env, Ext> & Ext
+export type TypedHandler<Q, B, P extends string = string, R = unknown, Ctx = {}> = (
+  context: Context<Q, B, P, Ctx>
 ) => R | Response | TypedResponse<R> | Promise<R | Response | TypedResponse<R>>;
 
 /** Route definition with optional handler and response type. */
@@ -215,16 +206,15 @@ export interface RouteDefinition<
   P extends string = string,
   Q extends SchemaDefinition = {},
   B extends SchemaDefinition = {},
-  Env = unknown,
   R = unknown,
-  Ext = {},
+  Ctx = {},
 > {
   method: Method;
   path: P;
   query?: Q;
   body?: B;
   description?: string;
-  handler?: TypedHandler<InferSchema<Q>, InferSchema<B>, P, Env, R, Ext>;
+  handler?: TypedHandler<InferSchema<Q>, InferSchema<B>, P, R, Ctx>;
 }
 
 /** Base structure for route entries (excludes handler for type compatibility). */
@@ -263,6 +253,54 @@ export interface Router<T extends RouterRoutes> {
 }
 
 // =============================================================================
+// Shared Client Types
+// =============================================================================
+
+/**
+ * Base options with path params required when route has path params.
+ *
+ * Uses `{} extends ExtractPathParams<P>` check because `Record<string, never>` has a
+ * string index signature, making `keyof` return `string` instead of `never`.
+ */
+type OptionsWithPath<
+  Opts extends { path?: unknown },
+  P extends string,
+> = {} extends ExtractPathParams<P>
+  ? Opts & { path?: never }
+  : Omit<Opts, 'path'> & { path: ExtractPathParams<P> };
+
+/**
+ * Route client method signature based on path, query, body, and response types.
+ *
+ * Determines if options parameter is required or optional based on whether
+ * the route has path params, query params, or body.
+ */
+type RouteClientMethod<
+  P extends string,
+  Q extends SchemaDefinition,
+  B extends SchemaDefinition,
+  R,
+  Opts extends { path?: unknown; query?: unknown; body?: unknown },
+> =
+  // If no path params, options may be optional (depending on query/body).
+  {} extends ExtractPathParams<P>
+    ? keyof Q extends never
+      ? keyof B extends never
+        ? (options?: Opts & { path?: never; query?: never; body?: never }) => Promise<R>
+        : (options: Opts & { path?: never; query?: never; body: InferSchema<B> }) => Promise<R>
+      : keyof B extends never
+        ? (options?: Opts & { path?: never; query?: InferSchema<Q>; body?: never }) => Promise<R>
+        : (options: Opts & { path?: never; query?: InferSchema<Q>; body: InferSchema<B> }) => Promise<R>
+    : // Has path params - options is always required.
+      keyof Q extends never
+      ? keyof B extends never
+        ? (options: OptionsWithPath<Opts, P> & { query?: never; body?: never }) => Promise<R>
+        : (options: OptionsWithPath<Opts, P> & { query?: never; body: InferSchema<B> }) => Promise<R>
+      : keyof B extends never
+        ? (options: OptionsWithPath<Opts, P> & { query?: InferSchema<Q>; body?: never }) => Promise<R>
+        : (options: OptionsWithPath<Opts, P> & { query?: InferSchema<Q>; body: InferSchema<B> }) => Promise<R>;
+
+// =============================================================================
 // HTTP Client Types
 // =============================================================================
 
@@ -273,58 +311,26 @@ export interface HttpClientConfig {
 }
 
 /** HTTP fetch options for a route. */
-export interface HttpFetchOptions<Q, B, P = Record<string, string>> {
-  /** Path parameters to substitute in the URL (e.g., { id: '123' } for /users/:id). */
-  path?: P;
-  query?: Q;
-  body?: B;
+export interface HttpFetchOptions {
+  path?: Record<string, string>;
+  query?: unknown;
+  body?: unknown;
   headers?: HeadersInit;
 }
 
-/**
- * HTTP fetch options with path params required when route has path params.
- *
- * Uses `{} extends ExtractPathParams<P>` check because `Record<string, never>` has a
- * string index signature, making `keyof` return `string` instead of `never`.
- */
-export type HttpFetchOptionsWithPath<
-  Q,
-  B,
-  P extends string,
-> = {} extends ExtractPathParams<P>
-  ? HttpFetchOptions<Q, B, never>
-  : Omit<HttpFetchOptions<Q, B, ExtractPathParams<P>>, 'path'> & { path: ExtractPathParams<P> };
-
-/** HTTP client method for a single route based on query, body, path, and response types. */
+/** HTTP client method for a single route. */
 export type HttpRouteClient<
   P extends string,
   Q extends SchemaDefinition,
   B extends SchemaDefinition,
   R = unknown,
-> =
-  // If no path params ({} can satisfy the extracted type), options may be optional.
-  {} extends ExtractPathParams<P>
-    ? keyof Q extends never
-      ? keyof B extends never
-        ? (options?: HttpFetchOptions<never, never, never>) => Promise<R>
-        : (options: HttpFetchOptions<never, InferSchema<B>, never>) => Promise<R>
-      : keyof B extends never
-        ? (options?: HttpFetchOptions<InferSchema<Q>, never, never>) => Promise<R>
-        : (options: HttpFetchOptions<InferSchema<Q>, InferSchema<B>, never>) => Promise<R>
-    : // Has path params - options is required with path
-      keyof Q extends never
-      ? keyof B extends never
-        ? (options: HttpFetchOptionsWithPath<never, never, P>) => Promise<R>
-        : (options: HttpFetchOptionsWithPath<never, InferSchema<B>, P>) => Promise<R>
-      : keyof B extends never
-        ? (options: HttpFetchOptionsWithPath<InferSchema<Q>, never, P>) => Promise<R>
-        : (options: HttpFetchOptionsWithPath<InferSchema<Q>, InferSchema<B>, P>) => Promise<R>;
+> = RouteClientMethod<P, Q, B, R, HttpFetchOptions>;
 
 /** Nested routes without configure (used for nested routers). */
 export type HttpRouterClientRoutes<T extends RouterRoutes> = {
   [K in keyof T]: T[K] extends Router<infer Routes>
     ? HttpRouterClientRoutes<Routes>
-    : T[K] extends RouteDefinition<infer P, infer Q, infer B, infer R>
+    : T[K] extends RouteDefinition<infer P, infer Q, infer B, infer R, infer _Ctx>
       ? HttpRouteClient<P, Q, B, R>
       : never;
 };
@@ -345,59 +351,27 @@ export interface LocalClientConfig {
 }
 
 /** Local invoke options for a route. */
-export interface LocalInvokeOptions<Q, B, P = Record<string, string>> {
-  /** Path parameters to substitute in the URL. */
-  path?: P;
-  query?: Q;
-  body?: B;
+export interface LocalInvokeOptions {
+  path?: Record<string, string>;
+  query?: unknown;
+  body?: unknown;
   env?: unknown;
   ctx?: ExecutionContext;
 }
 
-/**
- * Local invoke options with path params required when route has path params.
- *
- * Uses `{} extends ExtractPathParams<P>` check because `Record<string, never>` has a
- * string index signature, making `keyof` return `string` instead of `never`.
- */
-export type LocalInvokeOptionsWithPath<
-  Q,
-  B,
-  P extends string,
-> = {} extends ExtractPathParams<P>
-  ? LocalInvokeOptions<Q, B, never>
-  : Omit<LocalInvokeOptions<Q, B, ExtractPathParams<P>>, 'path'> & { path: ExtractPathParams<P> };
-
-/** Local client method for a single route based on query, body, path, and response types. */
+/** Local client method for a single route. */
 export type LocalRouteClient<
   P extends string,
   Q extends SchemaDefinition,
   B extends SchemaDefinition,
   R = unknown,
-> =
-  // If no path params ({} can satisfy the extracted type), options may be optional.
-  {} extends ExtractPathParams<P>
-    ? keyof Q extends never
-      ? keyof B extends never
-        ? (options?: LocalInvokeOptions<never, never, never>) => Promise<R>
-        : (options: LocalInvokeOptions<never, InferSchema<B>, never>) => Promise<R>
-      : keyof B extends never
-        ? (options?: LocalInvokeOptions<InferSchema<Q>, never, never>) => Promise<R>
-        : (options: LocalInvokeOptions<InferSchema<Q>, InferSchema<B>, never>) => Promise<R>
-    : // Has path params - options is required with path
-      keyof Q extends never
-      ? keyof B extends never
-        ? (options: LocalInvokeOptionsWithPath<never, never, P>) => Promise<R>
-        : (options: LocalInvokeOptionsWithPath<never, InferSchema<B>, P>) => Promise<R>
-      : keyof B extends never
-        ? (options: LocalInvokeOptionsWithPath<InferSchema<Q>, never, P>) => Promise<R>
-        : (options: LocalInvokeOptionsWithPath<InferSchema<Q>, InferSchema<B>, P>) => Promise<R>;
+> = RouteClientMethod<P, Q, B, R, LocalInvokeOptions>;
 
 /** Nested routes without configure (used for nested routers). */
 export type LocalRouterClientRoutes<T extends RouterRoutes> = {
   [K in keyof T]: T[K] extends Router<infer Routes>
     ? LocalRouterClientRoutes<Routes>
-    : T[K] extends RouteDefinition<infer P, infer Q, infer B, infer R, infer _Ext>
+    : T[K] extends RouteDefinition<infer P, infer Q, infer B, infer R, infer _Ctx>
       ? LocalRouteClient<P, Q, B, R>
       : never;
 };

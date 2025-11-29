@@ -6,14 +6,6 @@
 
 import type { Middleware, MiddlewareContext } from '../middleware.js';
 
-/**
- * Checks if the request is from localhost.
- */
-function isLocalhost(request: Request): boolean {
-  const url = new URL(request.url);
-  return url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1';
-}
-
 // =============================================================================
 // Basic Auth
 // =============================================================================
@@ -22,16 +14,12 @@ function isLocalhost(request: Request): boolean {
 export interface BasicAuthOptions {
   /** Realm name for the authentication challenge. */
   realm?: string;
-  /** Function to validate credentials. */
-  validate: (
+  /** Function to validate credentials. Returns claims to merge into context, or null to reject. */
+  verify: (
     username: string,
     password: string,
     context: MiddlewareContext
-  ) => Promise<boolean> | boolean;
-  /** Skip authentication for these paths. */
-  skipPaths?: (string | RegExp)[];
-  /** Skip authentication for localhost requests. */
-  skipLocalhost?: boolean;
+  ) => Promise<Record<string, unknown> | null> | Record<string, unknown> | null;
 }
 
 /**
@@ -41,8 +29,11 @@ export interface BasicAuthOptions {
  * ```typescript
  * const adminRouter = router('/admin', routes, [
  *   basicAuth({
- *     validate: async (username, password) => {
- *       return username === 'admin' && password === 'secret';
+ *     verify: async (username, password) => {
+ *       if (username === 'admin' && password === 'secret') {
+ *         return { user: { name: username } };
+ *       }
+ *       return null;
  *     }
  *   })
  * ]);
@@ -53,26 +44,6 @@ export function basicAuth(options: BasicAuthOptions): Middleware {
 
   return async (context, next) => {
     const { request } = context;
-
-    // Skip auth for certain paths
-    if (options.skipPaths) {
-      const url = new URL(request.url);
-      const pathname = url.pathname;
-      const shouldSkip = options.skipPaths.some(path => {
-        if (typeof path === 'string') {
-          return pathname.startsWith(path);
-        }
-        return path.test(pathname);
-      });
-      if (shouldSkip) {
-        return next();
-      }
-    }
-
-    // Skip for localhost in development
-    if (options.skipLocalhost && isLocalhost(request)) {
-      return next();
-    }
 
     const authHeader = request.headers.get('Authorization');
     if (!authHeader?.startsWith('Basic ')) {
@@ -93,8 +64,8 @@ export function basicAuth(options: BasicAuthOptions): Middleware {
       const username = credentials.substring(0, colonIndex);
       const password = credentials.substring(colonIndex + 1);
 
-      const isValid = await options.validate(username, password, context);
-      if (!isValid) {
+      const claims = await options.verify(username, password, context);
+      if (claims === null) {
         return new Response('Invalid credentials', {
           status: 401,
           headers: {
@@ -103,8 +74,7 @@ export function basicAuth(options: BasicAuthOptions): Middleware {
         });
       }
 
-      // Add user to context for handler access
-      context.user = username;
+      Object.assign(context, claims);
       return next();
     } catch (error) {
       return new Response('Invalid credentials', {
@@ -139,18 +109,22 @@ export interface JwtPayload {
   [key: string]: unknown;
 }
 
+/** JWT secret value. */
+type JwtSecret = string | ArrayBuffer | CryptoKey;
+
 /** JWT authentication middleware configuration. */
-export interface JwtAuthOptions {
-  /** Secret key or function to get the secret. */
-  secret: string | ArrayBuffer | CryptoKey | (() => Promise<string | ArrayBuffer | CryptoKey>);
-  /** Allowed algorithms. */
+export interface JwtAuthOptions<Ctx = {}> {
+  /** Secret key or function to get the secret from context. */
+  secret: JwtSecret | ((context: MiddlewareContext<Ctx>) => JwtSecret);
+  /**
+   * Map JWT payload to context properties. Return null to reject the token.
+   * The returned object is merged into the middleware context.
+   */
+  claims: (payload: JwtPayload) => Record<string, unknown> | null;
+  /** Allowed algorithms (default: ['HS256']). */
   algorithms?: string[];
-  /** Function to extract token from request. */
+  /** Function to extract token from request (default: Authorization header or 'token' cookie). */
   getToken?: (request: Request) => string | null;
-  /** Skip authentication for these paths. */
-  skipPaths?: (string | RegExp)[];
-  /** Validate additional claims. */
-  validate?: (payload: JwtPayload, context: MiddlewareContext) => Promise<boolean> | boolean;
 }
 
 /**
@@ -224,15 +198,27 @@ async function verifyJwt(
  *
  * @example
  * ```typescript
- * const apiRouter = router('/api', routes, [
- *   jwtAuth({
- *     secret: process.env.JWT_SECRET,
- *     skipPaths: ['/api/login']
- *   })
- * ]);
+ * interface AppContext {
+ *   env: { JWT_SECRET: string };
+ *   user: { id: string; email: string };
+ * }
+ *
+ * jwtAuth<AppContext>({
+ *   secret: (ctx) => ctx.env.JWT_SECRET,  // ctx.env is typed
+ *   claims: (payload) => ({
+ *     user: { id: payload.sub, email: payload.email },
+ *   }),
+ * })
+ *
+ * // In your route handler:
+ * route.ctx<AppContext>()({
+ *   handler: async (c) => {
+ *     return { email: c.user.email };  // Fully typed
+ *   },
+ * })
  * ```
  */
-export function jwtAuth(options: JwtAuthOptions): Middleware {
+export function jwtAuth<Ctx = {}>(options: JwtAuthOptions<Ctx>): Middleware<Ctx> {
   const getToken = options.getToken || ((req) => {
     const auth = req.headers.get('Authorization');
     if (auth?.startsWith('Bearer ')) {
@@ -252,21 +238,6 @@ export function jwtAuth(options: JwtAuthOptions): Middleware {
   return async (context, next) => {
     const { request } = context;
 
-    // Skip auth for certain paths
-    if (options.skipPaths) {
-      const url = new URL(request.url);
-      const pathname = url.pathname;
-      const shouldSkip = options.skipPaths.some(path => {
-        if (typeof path === 'string') {
-          return pathname.startsWith(path);
-        }
-        return path.test(pathname);
-      });
-      if (shouldSkip) {
-        return next();
-      }
-    }
-
     const token = getToken(request);
     if (!token) {
       return new Response('Missing token', {
@@ -277,22 +248,17 @@ export function jwtAuth(options: JwtAuthOptions): Middleware {
 
     try {
       const secret = typeof options.secret === 'function'
-        ? await options.secret()
+        ? options.secret(context)
         : options.secret;
 
       const payload = await verifyJwt(token, secret, options.algorithms);
 
-      // Additional validation if provided
-      if (options.validate) {
-        const isValid = await options.validate(payload, context);
-        if (!isValid) {
-          throw new Error('Token validation failed');
-        }
+      // Map payload to context properties
+      const claims = options.claims(payload);
+      if (claims === null) {
+        throw new Error('Token validation failed');
       }
-
-      // Add JWT payload to context
-      context.jwt = payload;
-      context.user = payload.sub;
+      Object.assign(context, claims);
 
       return next();
     } catch (error) {
@@ -311,10 +277,8 @@ export function jwtAuth(options: JwtAuthOptions): Middleware {
 
 /** Bearer token authentication options. */
 export interface BearerAuthOptions {
-  /** Function to validate the token. */
-  validate: (token: string, context: MiddlewareContext) => Promise<boolean> | boolean;
-  /** Skip authentication for these paths. */
-  skipPaths?: (string | RegExp)[];
+  /** Function to validate the token. Returns claims to merge into context, or null to reject. */
+  verify: (token: string, context: MiddlewareContext) => Promise<Record<string, unknown> | null> | Record<string, unknown> | null;
 }
 
 /**
@@ -324,8 +288,11 @@ export interface BearerAuthOptions {
  * ```typescript
  * const apiRouter = router('/api', routes, [
  *   bearerAuth({
- *     validate: async (token) => {
- *       return token === process.env.API_TOKEN;
+ *     verify: async (token) => {
+ *       if (token === process.env.API_TOKEN) {
+ *         return { apiClient: 'trusted' };
+ *       }
+ *       return null;
  *     }
  *   })
  * ]);
@@ -334,21 +301,6 @@ export interface BearerAuthOptions {
 export function bearerAuth(options: BearerAuthOptions): Middleware {
   return async (context, next) => {
     const { request } = context;
-
-    // Skip auth for certain paths
-    if (options.skipPaths) {
-      const url = new URL(request.url);
-      const pathname = url.pathname;
-      const shouldSkip = options.skipPaths.some(path => {
-        if (typeof path === 'string') {
-          return pathname.startsWith(path);
-        }
-        return path.test(pathname);
-      });
-      if (shouldSkip) {
-        return next();
-      }
-    }
 
     const authHeader = request.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
@@ -359,16 +311,16 @@ export function bearerAuth(options: BearerAuthOptions): Middleware {
     }
 
     const token = authHeader.slice(7);
-    const isValid = await options.validate(token, context);
+    const claims = await options.verify(token, context);
 
-    if (!isValid) {
+    if (claims === null) {
       return new Response('Invalid token', {
         status: 401,
         headers: { 'WWW-Authenticate': 'Bearer error="invalid_token"' },
       });
     }
 
-    context.token = token;
+    Object.assign(context, claims);
     return next();
   };
 }

@@ -195,8 +195,11 @@ describe('Middleware Integration', () => {
         },
         [
           basicAuth({
-            validate: async (username, password) => {
-              return username === 'admin' && password === 'secret';
+            verify: async (username, password) => {
+              if (username === 'admin' && password === 'secret') {
+                return { user: username };
+              }
+              return null;
             },
           }),
         ]
@@ -257,7 +260,7 @@ describe('Middleware Integration', () => {
         },
         [
           basicAuth({
-            validate: async () => true,
+            verify: async () => ({ authenticated: true }),
           }),
         ]
       );
@@ -330,8 +333,12 @@ describe('Middleware Integration', () => {
           cors({ origin: '*' }),
           requestId(),
           basicAuth({
-            validate: async (u, p) => u === 'user' && p === 'pass',
-            skipPaths: ['/api/health'],
+            verify: async (u, p) => {
+              if (u === 'user' && p === 'pass') {
+                return { user: u };
+              }
+              return null;
+            },
           }),
         ]
       );
@@ -505,7 +512,7 @@ describe('Middleware Integration', () => {
             },
             handler: async (c) => {
               events.push('handler');
-              return Response.json(c.params.body);
+              return Response.json(c.body);
             },
           }),
         },

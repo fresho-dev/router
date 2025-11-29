@@ -26,7 +26,7 @@ describe('Common Middleware', () => {
     nextResponse = new Response('test response');
     context = {
       request: new Request('http://example.com/test'),
-      params: { path: {}, query: {}, body: {} },
+      path: {}, query: {}, body: {},
       env: {},
     };
   });
@@ -198,24 +198,6 @@ describe('Common Middleware', () => {
       await middleware(context, next);
 
       assert.deepStrictEqual(loggedInfo.body, body);
-    });
-
-    it('should skip specified paths', async () => {
-      const logs: string[] = [];
-      const middleware = logger({
-        log: (message) => logs.push(message),
-        skipPaths: ['/health', /^\/metrics/],
-      });
-
-      // Test skipped path
-      context.request = new Request('http://example.com/health');
-      await middleware(context, next);
-      assert.strictEqual(logs.length, 0);
-
-      // Test normal path
-      context.request = new Request('http://example.com/api');
-      await middleware(context, next);
-      assert.strictEqual(logs.length, 2);
     });
 
     it('should handle errors and log them', async () => {

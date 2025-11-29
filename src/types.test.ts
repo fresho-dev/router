@@ -79,8 +79,8 @@ describe('types', () => {
         method: 'get',
         path: '/users/:id',
         handler: (c) => {
-          // TypeScript should know c.params.path.id is string
-          const id: string = c.params.path.id;
+          // TypeScript should know c.path.id is string
+          const id: string = c.path.id;
           return Response.json({ id });
         },
       });
@@ -96,8 +96,8 @@ describe('types', () => {
         path: '/users/:userId/posts/:postId',
         handler: (c) => {
           // TypeScript should know both params exist
-          const userId: string = c.params.path.userId;
-          const postId: string = c.params.path.postId;
+          const userId: string = c.path.userId;
+          const postId: string = c.path.postId;
           return Response.json({ userId, postId });
         },
       });
@@ -110,9 +110,9 @@ describe('types', () => {
         method: 'get',
         path: '/users',
         handler: (c) => {
-          // c.params.path should be Record<string, never> (empty)
+          // c.path should be Record<string, never> (empty)
           // This is a compile-time check - at runtime we just verify the route
-          return Response.json({ path: c.params.path });
+          return Response.json({ path: c.path });
         },
       });
 

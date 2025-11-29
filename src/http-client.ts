@@ -74,8 +74,8 @@ function createHttpRouteFetcher(
   routeDef: RouteDefinition,
   basePath: string,
   sharedConfig: { current: HttpClientConfig }
-): (options?: HttpFetchOptions<unknown, unknown, unknown>) => Promise<unknown> {
-  return async (options: HttpFetchOptions<unknown, unknown, unknown> = {}) => {
+): (options?: HttpFetchOptions) => Promise<unknown> {
+  return async (options: HttpFetchOptions = {}) => {
     const config = sharedConfig.current;
 
     // Substitute path parameters before building URL.

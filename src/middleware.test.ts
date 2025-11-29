@@ -9,9 +9,6 @@ import {
   type MiddlewareContext,
   runMiddleware,
   compose,
-  forMethods,
-  forPaths,
-  skipPaths,
 } from './middleware.js';
 
 describe('Middleware', () => {
@@ -20,7 +17,7 @@ describe('Middleware', () => {
   beforeEach(() => {
     context = {
       request: new Request('http://example.com/test'),
-      params: { path: {}, query: {}, body: {} },
+      path: {}, query: {}, body: {},
       env: {},
     };
   });
@@ -152,158 +149,6 @@ describe('Middleware', () => {
       const composed = compose();
       const response = await composed(context, async () => new Response('final'));
       assert.strictEqual(await response.text(), 'final');
-    });
-  });
-
-  describe('forMethods', () => {
-    it('should only run middleware for specified methods', async () => {
-      let executed = false;
-      const middleware: Middleware = async (ctx, next) => {
-        executed = true;
-        return next();
-      };
-
-      const wrapped = forMethods(['POST', 'PUT'], middleware);
-
-      // Test GET (should not execute)
-      context.request = new Request('http://example.com/test', { method: 'GET' });
-      await wrapped(context, async () => new Response('ok'));
-      assert.strictEqual(executed, false);
-
-      // Test POST (should execute)
-      context.request = new Request('http://example.com/test', { method: 'POST' });
-      await wrapped(context, async () => new Response('ok'));
-      assert.strictEqual(executed, true);
-
-      // Test PUT (should execute)
-      executed = false;
-      context.request = new Request('http://example.com/test', { method: 'PUT' });
-      await wrapped(context, async () => new Response('ok'));
-      assert.strictEqual(executed, true);
-    });
-
-    it('should handle case-insensitive methods', async () => {
-      let executed = false;
-      const middleware: Middleware = async (ctx, next) => {
-        executed = true;
-        return next();
-      };
-
-      const wrapped = forMethods(['post'], middleware);
-
-      context.request = new Request('http://example.com/test', { method: 'POST' });
-      await wrapped(context, async () => new Response('ok'));
-      assert.strictEqual(executed, true);
-    });
-  });
-
-  describe('forPaths', () => {
-    it('should only run middleware for matching string paths', async () => {
-      let executed = false;
-      const middleware: Middleware = async (ctx, next) => {
-        executed = true;
-        return next();
-      };
-
-      const wrapped = forPaths(['/api/', '/admin/'], middleware);
-
-      // Test /api/users (should execute)
-      context.request = new Request('http://example.com/api/users');
-      await wrapped(context, async () => new Response('ok'));
-      assert.strictEqual(executed, true);
-
-      // Test /admin/settings (should execute)
-      executed = false;
-      context.request = new Request('http://example.com/admin/settings');
-      await wrapped(context, async () => new Response('ok'));
-      assert.strictEqual(executed, true);
-
-      // Test /public/assets (should not execute)
-      executed = false;
-      context.request = new Request('http://example.com/public/assets');
-      await wrapped(context, async () => new Response('ok'));
-      assert.strictEqual(executed, false);
-    });
-
-    it('should support regex paths', async () => {
-      let executed = false;
-      const middleware: Middleware = async (ctx, next) => {
-        executed = true;
-        return next();
-      };
-
-      const wrapped = forPaths([/^\/api\/v\d+\//], middleware);
-
-      // Test /api/v1/users (should execute)
-      context.request = new Request('http://example.com/api/v1/users');
-      await wrapped(context, async () => new Response('ok'));
-      assert.strictEqual(executed, true);
-
-      // Test /api/v2/posts (should execute)
-      executed = false;
-      context.request = new Request('http://example.com/api/v2/posts');
-      await wrapped(context, async () => new Response('ok'));
-      assert.strictEqual(executed, true);
-
-      // Test /api/users (should not execute)
-      executed = false;
-      context.request = new Request('http://example.com/api/users');
-      await wrapped(context, async () => new Response('ok'));
-      assert.strictEqual(executed, false);
-    });
-  });
-
-  describe('skipPaths', () => {
-    it('should skip middleware for matching string paths', async () => {
-      let executed = false;
-      const middleware: Middleware = async (ctx, next) => {
-        executed = true;
-        return next();
-      };
-
-      const wrapped = skipPaths(['/public/', '/health'], middleware);
-
-      // Test /api/users (should execute)
-      context.request = new Request('http://example.com/api/users');
-      await wrapped(context, async () => new Response('ok'));
-      assert.strictEqual(executed, true);
-
-      // Test /public/assets (should not execute)
-      executed = false;
-      context.request = new Request('http://example.com/public/assets');
-      await wrapped(context, async () => new Response('ok'));
-      assert.strictEqual(executed, false);
-
-      // Test /health (should not execute)
-      context.request = new Request('http://example.com/health');
-      await wrapped(context, async () => new Response('ok'));
-      assert.strictEqual(executed, false);
-    });
-
-    it('should support regex paths', async () => {
-      let executed = false;
-      const middleware: Middleware = async (ctx, next) => {
-        executed = true;
-        return next();
-      };
-
-      const wrapped = skipPaths([/\.(js|css|png|jpg)$/], middleware);
-
-      // Test /api/users (should execute)
-      context.request = new Request('http://example.com/api/users');
-      await wrapped(context, async () => new Response('ok'));
-      assert.strictEqual(executed, true);
-
-      // Test /assets/style.css (should not execute)
-      executed = false;
-      context.request = new Request('http://example.com/assets/style.css');
-      await wrapped(context, async () => new Response('ok'));
-      assert.strictEqual(executed, false);
-
-      // Test /images/logo.png (should not execute)
-      context.request = new Request('http://example.com/images/logo.png');
-      await wrapped(context, async () => new Response('ok'));
-      assert.strictEqual(executed, false);
     });
   });
 

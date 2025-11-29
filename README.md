@@ -13,9 +13,9 @@ const api = router('/api', {
     path: '/users/:id',
     query: { include: 'string?' },
     handler: async (c) => {
-      // c.params.path.id   - typed as string
-      // c.params.query.include - typed as string | undefined
-      return { id: c.params.path.id, name: 'Alice' };
+      // c.path.id       - typed as string
+      // c.query.include - typed as string | undefined
+      return { id: c.path.id, name: 'Alice' };
     },
   }),
 
@@ -24,10 +24,10 @@ const api = router('/api', {
     path: '/users',
     body: { name: 'string', email: 'string', age: 'number?' },
     handler: async (c) => {
-      // c.params.body.name  - typed as string
-      // c.params.body.email - typed as string
-      // c.params.body.age   - typed as number | undefined
-      return { id: '123', ...c.params.body };
+      // c.body.name  - typed as string
+      // c.body.email - typed as string
+      // c.body.age   - typed as number | undefined
+      return { id: '123', ...c.body };
     },
   }),
 });
@@ -93,9 +93,9 @@ const createPost = route({
     metadata: { priority: 'number', draft: 'boolean?' }
   },
   handler: async (c) => {
-    c.params.body.title      // string
-    c.params.body.tags       // string[]
-    c.params.body.metadata   // { priority: number, draft: boolean | undefined }
+    c.body.title      // string
+    c.body.tags       // string[]
+    c.body.metadata   // { priority: number, draft: boolean | undefined }
   },
 });
 ```
@@ -107,23 +107,23 @@ Path parameters are extracted and typed automatically:
 ```typescript
 // Simple
 route({ path: '/users/:id', ... })
-// c.params.path.id → string
+// c.path.id → string
 
 // Multiple
 route({ path: '/users/:userId/posts/:postId', ... })
-// c.params.path.userId → string
-// c.params.path.postId → string
+// c.path.userId → string
+// c.path.postId → string
 
 // With extensions
 route({ path: '/files/:name.pdf', ... })
 // Matches /files/document.pdf
-// c.params.path.name → "document"
+// c.path.name → "document"
 
 // Complex patterns
 route({ path: '/audio/:artist-:track.mp3', ... })
 // Matches /audio/beatles-yesterday.mp3
-// c.params.path.artist → "beatles"
-// c.params.path.track → "yesterday"
+// c.path.artist → "beatles"
+// c.path.track → "yesterday"
 ```
 
 ## Nested Routers
@@ -158,72 +158,20 @@ Add middleware to routers:
 
 ```typescript
 import { router, route } from 'typed-routes';
-import { cors, errorHandler, logger } from 'typed-routes/middleware';
+import { cors, errorHandler, jwtAuth } from 'typed-routes/middleware';
 
 const api = router('/api', {
   hello: route({ method: 'get', path: '/hello', handler: ... }),
 }, [
   cors(),
   errorHandler(),
-  logger(),
+  jwtAuth({ secret: process.env.JWT_SECRET, claims: (p) => ({ user: p.sub }) }),
 ]);
 ```
 
-### Built-in Middleware
+Built-in middleware: `cors`, `errorHandler`, `logger`, `rateLimit`, `requestId`, `timeout`, `basicAuth`, `bearerAuth`, `jwtAuth`, `contentType`.
 
-```typescript
-import {
-  cors,           // CORS headers
-  errorHandler,   // Catch errors, return JSON
-  logger,         // Request logging
-  rateLimit,      // Rate limiting
-  requestId,      // X-Request-ID header
-  timeout,        // Request timeout
-  basicAuth,      // Basic authentication
-  bearerAuth,     // Bearer token auth
-  jwtAuth,        // JWT validation
-} from 'typed-routes/middleware';
-```
-
-### Custom Middleware
-
-```typescript
-import type { Middleware, MiddlewareContext, MiddlewareNext } from 'typed-routes';
-
-const timing: Middleware = async (ctx: MiddlewareContext, next: MiddlewareNext) => {
-  const start = Date.now();
-  const response = await next();
-  const ms = Date.now() - start;
-  response.headers.set('X-Response-Time', `${ms}ms`);
-  return response;
-};
-```
-
-### Typed Middleware Context
-
-Pass typed context from middleware to handlers:
-
-```typescript
-interface AuthContext {
-  user: { id: string; name: string };
-}
-
-const authMiddleware: Middleware = async (ctx, next) => {
-  ctx.user = await validateToken(ctx.request.headers.get('Authorization'));
-  return next();
-};
-
-const api = router('/api', {
-  profile: route.ctx<AuthContext>()({
-    method: 'get',
-    path: '/profile',
-    handler: async (c) => {
-      // c.user is typed as { id: string; name: string }
-      return { name: c.user.name };
-    },
-  }),
-}, [authMiddleware]);
-```
+See **[Middleware Documentation](docs/middleware.md)** for detailed usage, custom middleware authoring, and patterns.
 
 ## HTTP Client
 
@@ -238,7 +186,7 @@ const api = router('/api', {
     method: 'get',
     path: '/users/:id',
     query: { include: 'string?' },
-    handler: async (c) => ({ id: c.params.path.id, name: 'Alice' }),
+    handler: async (c) => ({ id: c.path.id, name: 'Alice' }),
   }),
 });
 
@@ -342,47 +290,90 @@ export default {
 };
 ```
 
-### Typed Environment Bindings
+### Typed Context
 
-Use `route.env<E>()` to type environment bindings:
+Use `route.ctx<Ctx>()` to type environment bindings and middleware-added properties:
 
 ```typescript
-interface Env {
-  KV: KVNamespace;
-  DB: D1Database;
+interface AppContext {
+  env: {
+    KV: KVNamespace;
+    DB: D1Database;
+  };
+  user: { id: string };  // Added by auth middleware
 }
 
-const getData = route.env<Env>()({
+const profile = route.ctx<AppContext>()({
   method: 'get',
-  path: '/data',
+  path: '/profile',
   handler: async (c) => {
-    const value = await c.env.KV.get('key'); // c.env is typed!
-    return { value };
+    // c.env.KV, c.env.DB are typed
+    // c.user is typed (from middleware)
+    const data = await c.env.KV.get('key');
+    return { userId: c.user.id, data };
   },
 });
 ```
 
-### Typed Environment + Middleware Context
+## Common Patterns
 
-Chain with `.ctx<C>()` for both:
+For detailed middleware patterns including JWT authentication, role-based access control, and mixed public/protected routes, see the **[Middleware Documentation](docs/middleware.md#patterns)**.
+
+### Cloudflare Workers with D1
+
+Combine environment bindings with typed context:
 
 ```typescript
-interface Env {
-  DB: D1Database;
+import { route, router } from 'typed-routes';
+import { jwtAuth } from 'typed-routes/middleware';
+
+interface AppContext {
+  env: {
+    DB: D1Database;
+    JWT_SECRET: string;
+  };
+  user: {
+    id: string;
+    email: string;
+  };
 }
 
-interface AuthContext {
-  user: { id: string };
-}
+const api = router('/api', {
+  users: route.ctx<AppContext>()({
+    method: 'get',
+    path: '/users',
+    handler: async (c) => {
+      // c.env.DB is typed as D1Database
+      // c.user is typed
+      const { results } = await c.env.DB.prepare('SELECT * FROM users').all();
+      return { users: results, requestedBy: c.user.id };
+    },
+  }),
+}, [
+  jwtAuth<AppContext>({
+    secret: (ctx) => ctx.env.JWT_SECRET,  // ctx.env is typed
+    claims: (payload) => ({
+      user: { id: payload.sub, email: payload.email },
+    }),
+  }),
+]);
 
-const profile = route.env<Env>().ctx<AuthContext>()({
-  method: 'get',
-  path: '/profile',
-  handler: async (c) => {
-    // c.env.DB is typed, c.user is typed
-    await c.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(c.user.id);
-  },
-});
+export default { fetch: api.handler() };
+```
+
+### Testing with Local Client
+
+Test routes directly without HTTP:
+
+```typescript
+import { createLocalClient } from 'typed-routes';
+import { api } from './server.js';
+
+const client = createLocalClient(api);
+client.configure({ env: { DB: mockDb } });
+
+const result = await client.users();
+assert.ok(result.users);
 ```
 
 ## Size

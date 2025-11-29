@@ -91,14 +91,14 @@ function createLocalRouteInvoker(
   routeDef: RouteDefinition,
   basePath: string,
   sharedConfig: { current: LocalClientConfig }
-): (options?: LocalInvokeOptions<unknown, unknown, unknown>) => Promise<unknown> {
+): (options?: LocalInvokeOptions) => Promise<unknown> {
   // Pre-extract path param names for this route.
   const fullPathTemplate = basePath + routeDef.path;
   const pathParamNames = extractPathParamNames(fullPathTemplate);
 
   const routeId = `${routeDef.method.toUpperCase()} ${fullPathTemplate}`;
 
-  return async (options: LocalInvokeOptions<unknown, unknown, unknown> = {}) => {
+  return async (options: LocalInvokeOptions = {}) => {
     const config = sharedConfig.current;
 
     // Substitute path parameters into the URL.
@@ -152,10 +152,12 @@ function createLocalRouteInvoker(
       return {};
     }
 
-    // Build unified handler context with path params.
+    // Build unified handler context with flattened params.
     const context = {
       request,
-      params: { path: pathParams, query, body },
+      path: pathParams,
+      query,
+      body,
       env: options.env ?? config.env,
       executionCtx: options.ctx ?? config.ctx,
     } as Parameters<typeof routeDef.handler>[0];

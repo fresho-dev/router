@@ -4,6 +4,9 @@
  * Import via: import { cors, errorHandler } from 'typed-routes/middleware';
  */
 
+// Compose utility
+export { compose } from '../middleware.js';
+
 // CORS middleware
 export type { CorsOptions } from './cors.js';
 export { cors } from './cors.js';
@@ -29,6 +32,7 @@ export type {
   ContentTypeOptions,
 } from './common.js';
 export {
+  HttpError,
   errorHandler,
   logger,
   rateLimit,

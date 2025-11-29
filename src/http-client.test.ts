@@ -275,5 +275,87 @@ describe('http-client', () => {
       });
     });
 
+    describe('type inference with route.ctx() and route.env()', () => {
+      it('infers return type correctly with route.ctx<>()', async (t) => {
+        interface AuthContext {
+          user: { id: string; name: string };
+        }
+
+        t.mock.method(globalThis, 'fetch', async () =>
+          new Response(JSON.stringify({ greeting: 'Hello, Alice' }))
+        );
+
+        const api = router('/api', {
+          profile: route.ctx<AuthContext>()({
+            method: 'get',
+            path: '/profile',
+            handler: async (c) => ({ greeting: `Hello, ${c.user.name}` }),
+          }),
+        });
+
+        const client = createHttpClient(api);
+        client.configure({ baseUrl: 'http://test.com' });
+
+        const result = await client.profile();
+
+        // If types are broken, result would be `never` or `unknown`.
+        // This assertion verifies the return type is correctly inferred.
+        assert.strictEqual(result.greeting, 'Hello, Alice');
+      });
+
+      it('infers return type correctly with route.ctx<>() for env', async (t) => {
+        interface AppContext {
+          env: { API_KEY: string };
+        }
+
+        t.mock.method(globalThis, 'fetch', async () =>
+          new Response(JSON.stringify({ data: 'secret' }))
+        );
+
+        const api = router('/api', {
+          secret: route.ctx<AppContext>()({
+            method: 'get',
+            path: '/secret',
+            handler: async (c) => ({ data: c.env.API_KEY }),
+          }),
+        });
+
+        const client = createHttpClient(api);
+        client.configure({ baseUrl: 'http://test.com' });
+
+        const result = await client.secret();
+        assert.strictEqual(result.data, 'secret');
+      });
+
+      it('infers return type correctly with route.ctx<>() for env and middleware props', async (t) => {
+        interface AppContext {
+          env: { DB: { query: () => string } };
+          userId: string;
+        }
+
+        t.mock.method(globalThis, 'fetch', async () =>
+          new Response(JSON.stringify({ userId: 'u123', dbResult: 'data' }))
+        );
+
+        const api = router('/api', {
+          userData: route.ctx<AppContext>()({
+            method: 'get',
+            path: '/user-data',
+            handler: async (c) => ({
+              userId: c.userId,
+              dbResult: c.env.DB.query(),
+            }),
+          }),
+        });
+
+        const client = createHttpClient(api);
+        client.configure({ baseUrl: 'http://test.com' });
+
+        const result = await client.userData();
+        assert.strictEqual(result.userId, 'u123');
+        assert.strictEqual(result.dbResult, 'data');
+      });
+    });
+
   });
 });

@@ -49,7 +49,7 @@ describe('local-client', () => {
           method: 'get',
           path: '/test',
           query: { name: 'string' },
-          handler: async (c) => Response.json({ name: c.params.query.name }),
+          handler: async (c) => Response.json({ name: c.query.name }),
         }),
       }));
 
@@ -63,7 +63,7 @@ describe('local-client', () => {
           method: 'post',
           path: '/test',
           body: { name: 'string' },
-          handler: async (c) => Response.json({ name: c.params.body.name }),
+          handler: async (c) => Response.json({ name: c.body.name }),
         }),
       }));
 
@@ -145,11 +145,14 @@ describe('local-client', () => {
     });
 
     it('per-call options override configured defaults', async () => {
+      interface AppContext {
+        env: { DB: string };
+      }
       const client = createLocalClient(router('', {
-        test: route({
+        test: route.ctx<AppContext>()({
           method: 'get',
           path: '/test',
-          handler: async (c) => Response.json({ db: (c.env as Record<string, string>).DB }),
+          handler: async (c) => Response.json({ db: c.env.DB }),
         }),
       }));
 
@@ -209,7 +212,7 @@ describe('local-client', () => {
           get: route({
             method: 'get',
             path: '/:id',
-            handler: async (c) => ({ userId: c.params.path.id }),
+            handler: async (c) => ({ userId: c.path.id }),
           }),
         }),
       });
@@ -225,8 +228,8 @@ describe('local-client', () => {
           method: 'get',
           path: '/users/:userId/posts/:postId',
           handler: async (c) => ({
-            userId: c.params.path.userId,
-            postId: c.params.path.postId,
+            userId: c.path.userId,
+            postId: c.path.postId,
           }),
         }),
       });
@@ -278,8 +281,8 @@ describe('local-client', () => {
           path: '/users/:userId/posts' as const,
           query: { limit: 'number?' },
           handler: async (c) => ({
-            userId: c.params.path.userId,
-            limit: c.params.query.limit ?? 10,
+            userId: c.path.userId,
+            limit: c.query.limit ?? 10,
           }),
         }),
       });
@@ -303,7 +306,7 @@ describe('local-client', () => {
             path: '',
             query: { limit: 'number' },
             handler: async (c) => {
-              const items = Array.from({ length: c.params.query.limit }, (_, i) => i);
+              const items = Array.from({ length: c.query.limit }, (_, i) => i);
               return { items };
             },
           }),
@@ -323,9 +326,9 @@ describe('local-client', () => {
             path: '',
             query: { limit: 'number?' },
             handler: async (c) => {
-              const limit = c.params.query.limit ?? 10;
+              const limit = c.query.limit ?? 10;
               const items = Array.from({ length: limit }, (_, i) => i);
-              return { items, hadDefault: c.params.query.limit === undefined };
+              return { items, hadDefault: c.query.limit === undefined };
             },
           }),
         }),
@@ -350,8 +353,8 @@ describe('local-client', () => {
             path: '/search',
             query: { q: 'string' },
             handler: async (c) => {
-              const upper = c.params.query.q.toUpperCase();
-              const len = c.params.query.q.length;
+              const upper = c.query.q.toUpperCase();
+              const len = c.query.q.length;
               return { upper, len };
             },
           }),
@@ -372,7 +375,7 @@ describe('local-client', () => {
             path: '',
             query: { enabled: 'boolean' },
             handler: async (c) => {
-              const status = c.params.query.enabled ? 'on' : 'off';
+              const status = c.query.enabled ? 'on' : 'off';
               return { status };
             },
           }),
@@ -393,8 +396,8 @@ describe('local-client', () => {
               path: '',
               body: { name: 'string', age: 'number' },
               handler: async (c) => {
-                const greeting = `Hello ${c.params.body.name}`;
-                const nextAge = c.params.body.age + 1;
+                const greeting = `Hello ${c.body.name}`;
+                const nextAge = c.body.age + 1;
                 return { greeting, nextAge };
               },
             }),
@@ -417,7 +420,7 @@ describe('local-client', () => {
             query: { multiplier: 'number' },
             body: { values: 'string' },
             handler: async (c) => {
-              const repeated = c.params.body.values.repeat(c.params.query.multiplier);
+              const repeated = c.body.values.repeat(c.query.multiplier);
               return { repeated };
             },
           }),

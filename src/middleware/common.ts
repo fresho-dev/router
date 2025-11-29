@@ -11,6 +11,37 @@ import type { Middleware, MiddlewareContext } from '../middleware.js';
 // =============================================================================
 
 /**
+ * HTTP error with status code for use with errorHandler middleware.
+ *
+ * Throw this in route handlers to return a specific HTTP status code.
+ * The errorHandler middleware will catch it and format the response.
+ *
+ * @example
+ * ```typescript
+ * import { HttpError } from 'typed-routes/middleware';
+ *
+ * const getUser = route({
+ *   method: 'get',
+ *   path: '/users/:id',
+ *   handler: async (c) => {
+ *     const user = await db.findUser(c.path.id);
+ *     if (!user) throw new HttpError('User not found', 404);
+ *     return user;
+ *   },
+ * });
+ * ```
+ */
+export class HttpError extends Error {
+  constructor(
+    message: string,
+    public status: number
+  ) {
+    super(message);
+    this.name = 'HttpError';
+  }
+}
+
+/**
  * Extracts HTTP status code from an error object.
  *
  * Supports errors with `status` or `statusCode` properties (common patterns
@@ -101,8 +132,6 @@ export interface LoggerOptions {
   includeHeaders?: boolean;
   /** Include request body in log. */
   includeBody?: boolean;
-  /** Skip logging for these paths. */
-  skipPaths?: (string | RegExp)[];
   /** Custom log formatter. */
   formatter?: (info: LogInfo) => string;
 }
@@ -135,20 +164,6 @@ export function logger(options: LoggerOptions = {}): Middleware {
     const { request } = context;
     const start = Date.now();
     const url = new URL(request.url);
-
-    // Skip logging for certain paths
-    if (options.skipPaths) {
-      const pathname = url.pathname;
-      const shouldSkip = options.skipPaths.some(path => {
-        if (typeof path === 'string') {
-          return pathname.startsWith(path);
-        }
-        return path.test(pathname);
-      });
-      if (shouldSkip) {
-        return next();
-      }
-    }
 
     // Collect request info
     const info: LogInfo = {

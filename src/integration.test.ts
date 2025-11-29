@@ -18,7 +18,7 @@ describe('integration tests', () => {
       method: 'get',
       path: '/echo',
       query: { message: 'string' },
-      handler: async (c) => ({ message: c.params.query.message }),
+      handler: async (c) => ({ message: c.query.message }),
     }),
 
     users: router('/users', {
@@ -27,7 +27,7 @@ describe('integration tests', () => {
         path: '',
         query: { limit: 'number?' },
         handler: async (c) => {
-          const limit = c.params.query.limit ?? 10;
+          const limit = c.query.limit ?? 10;
           const users = Array.from({ length: limit }, (_, i) => ({ id: i + 1, name: `User ${i + 1}` }));
           return { users };
         },
@@ -37,7 +37,7 @@ describe('integration tests', () => {
         method: 'post',
         path: '',
         body: { name: 'string', email: 'string' },
-        handler: async (c) => ({ id: 1, name: c.params.body.name, email: c.params.body.email }),
+        handler: async (c) => ({ id: 1, name: c.body.name, email: c.body.email }),
       }),
     }),
   });

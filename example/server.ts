@@ -3,7 +3,7 @@
  */
 
 import { route, router, createHttpClient } from 'typed-routes';
-import { cors, errorHandler } from 'typed-routes/middleware';
+import { cors, errorHandler, HttpError } from 'typed-routes/middleware';
 
 // Shared types.
 export interface Todo {
@@ -40,8 +40,8 @@ export const api = router(
         query: { completed: 'boolean?' },
         handler: async (c) => {
           let items = Array.from(todos.values());
-          if (c.params.query.completed !== undefined) {
-            items = items.filter((t) => t.completed === c.params.query.completed);
+          if (c.query.completed !== undefined) {
+            items = items.filter((t) => t.completed === c.query.completed);
           }
           return { todos: items, count: items.length };
         },
@@ -51,13 +51,8 @@ export const api = router(
         method: 'get',
         path: '/:id',
         handler: async (c) => {
-          const todo = todos.get(c.params.path.id);
-          if (!todo) {
-            return new Response(JSON.stringify({ error: 'Todo not found' }), {
-              status: 404,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
+          const todo = todos.get(c.path.id);
+          if (!todo) throw new HttpError('Todo not found', 404);
           return todo;
         },
       }),
@@ -70,7 +65,7 @@ export const api = router(
           const id = String(nextId++);
           const todo: Todo = {
             id,
-            title: c.params.body.title,
+            title: c.body.title,
             completed: false,
             createdAt: new Date().toISOString(),
           };
@@ -84,15 +79,10 @@ export const api = router(
         path: '/:id',
         body: { title: 'string?', completed: 'boolean?' },
         handler: async (c) => {
-          const todo = todos.get(c.params.path.id);
-          if (!todo) {
-            return new Response(JSON.stringify({ error: 'Todo not found' }), {
-              status: 404,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
-          if (c.params.body.title !== undefined) todo.title = c.params.body.title;
-          if (c.params.body.completed !== undefined) todo.completed = c.params.body.completed;
+          const todo = todos.get(c.path.id);
+          if (!todo) throw new HttpError('Todo not found', 404);
+          if (c.body.title !== undefined) todo.title = c.body.title;
+          if (c.body.completed !== undefined) todo.completed = c.body.completed;
           return todo;
         },
       }),
@@ -101,13 +91,8 @@ export const api = router(
         method: 'delete',
         path: '/:id',
         handler: async (c) => {
-          const existed = todos.delete(c.params.path.id);
-          if (!existed) {
-            return new Response(JSON.stringify({ error: 'Todo not found' }), {
-              status: 404,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
+          const existed = todos.delete(c.path.id);
+          if (!existed) throw new HttpError('Todo not found', 404);
           return { deleted: true };
         },
       }),

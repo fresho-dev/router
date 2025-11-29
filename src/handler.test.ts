@@ -261,7 +261,7 @@ describe('standalone router', () => {
             method: 'get',
             path: '/test',
             query: { name: 'string' },
-            handler: async (c) => Response.json({ name: c.params.query.name }),
+            handler: async (c) => Response.json({ name: c.query.name }),
           }),
         })
       );
@@ -278,7 +278,7 @@ describe('standalone router', () => {
             method: 'get',
             path: '/test',
             query: { count: 'number' },
-            handler: async (c) => Response.json({ count: c.params.query.count }),
+            handler: async (c) => Response.json({ count: c.query.count }),
           }),
         })
       );
@@ -295,7 +295,7 @@ describe('standalone router', () => {
             method: 'get',
             path: '/test',
             query: { active: 'boolean' },
-            handler: async (c) => Response.json({ active: c.params.query.active }),
+            handler: async (c) => Response.json({ active: c.query.active }),
           }),
         })
       );
@@ -312,7 +312,7 @@ describe('standalone router', () => {
             method: 'get',
             path: '/test',
             query: { name: 'string?' },
-            handler: async (c) => Response.json({ name: c.params.query.name }),
+            handler: async (c) => Response.json({ name: c.query.name }),
           }),
         })
       );
@@ -329,7 +329,7 @@ describe('standalone router', () => {
             method: 'get',
             path: '/test',
             query: { name: 'string?' },
-            handler: async (c) => Response.json({ query: c.params.query }),
+            handler: async (c) => Response.json({ query: c.query }),
           }),
         })
       );
@@ -382,7 +382,7 @@ describe('standalone router', () => {
             method: 'post',
             path: '/test',
             body: { name: 'string' },
-            handler: async (c) => Response.json({ name: c.params.body.name }),
+            handler: async (c) => Response.json({ name: c.body.name }),
           }),
         })
       );
@@ -513,7 +513,7 @@ describe('standalone router', () => {
             method: 'get',
             path: '/test',
             query: {},
-            handler: async (c) => Response.json({ query: c.params.query }),
+            handler: async (c) => Response.json({ query: c.query }),
           }),
         })
       );
@@ -530,7 +530,7 @@ describe('standalone router', () => {
             method: 'get',
             path: '/test',
             query: { q: 'string' },
-            handler: async (c) => Response.json({ q: c.params.query.q }),
+            handler: async (c) => Response.json({ q: c.query.q }),
           }),
         })
       );
@@ -549,7 +549,7 @@ describe('standalone router', () => {
             method: 'get',
             path: '/test',
             query: { name: 'string' },
-            handler: async (c) => Response.json({ name: c.params.query.name }),
+            handler: async (c) => Response.json({ name: c.query.name }),
           }),
         })
       );
@@ -645,7 +645,7 @@ describe('standalone router', () => {
           getBook: route({
             method: 'get',
             path: '/books/:id',
-            handler: async (c) => Response.json({ bookId: c.params.path.id }),
+            handler: async (c) => Response.json({ bookId: c.path.id }),
           }),
         })
       );
@@ -662,7 +662,7 @@ describe('standalone router', () => {
             method: 'get',
             path: '/books/:bookId/chapters/:chapterId',
             handler: async (c) =>
-              Response.json({ bookId: c.params.path.bookId, chapterId: c.params.path.chapterId }),
+              Response.json({ bookId: c.path.bookId, chapterId: c.path.chapterId }),
           }),
         })
       );
@@ -680,7 +680,7 @@ describe('standalone router', () => {
             path: '/books/:id',
             query: { format: 'string?' },
             handler: async (c) =>
-              Response.json({ bookId: c.params.path.id, format: c.params.query.format ?? 'json' }),
+              Response.json({ bookId: c.path.id, format: c.query.format ?? 'json' }),
           }),
         })
       );
@@ -696,7 +696,7 @@ describe('standalone router', () => {
           getFile: route({
             method: 'get',
             path: '/files/:name.pdf',
-            handler: async (c) => Response.json({ name: c.params.path.name }),
+            handler: async (c) => Response.json({ name: c.path.name }),
           }),
         })
       );
@@ -728,7 +728,7 @@ describe('standalone router', () => {
             method: 'get',
             path: '/audio/:artist-:track.mp3',
             handler: async (c) =>
-              Response.json({ artist: c.params.path.artist, track: c.params.path.track }),
+              Response.json({ artist: c.path.artist, track: c.path.track }),
           }),
         })
       );
@@ -744,7 +744,7 @@ describe('standalone router', () => {
           getFile: route({
             method: 'get',
             path: '/files/:name.tar.gz',
-            handler: async (c) => Response.json({ name: c.params.path.name }),
+            handler: async (c) => Response.json({ name: c.path.name }),
           }),
         })
       );

@@ -6,38 +6,34 @@
  */
 
 import * as readline from 'node:readline';
-import { client, type Todo } from './server.js';
+import { client } from './server.js';
 
 client.configure({ baseUrl: 'http://localhost:3000' });
 
-function printTodos(todos: Todo[]) {
-  if (todos.length === 0) {
+async function list(filter?: 'done' | 'pending') {
+  const query =
+    filter === 'done' ? { completed: true } : filter === 'pending' ? { completed: false } : undefined;
+  const result = await client.todos.list(query ? { query } : undefined);
+  console.log(`\n${result.count} todo(s):`);
+  if (result.todos.length === 0) {
     console.log('  (no todos)\n');
     return;
   }
-  for (const t of todos) {
+  for (const t of result.todos) {
     const check = t.completed ? 'x' : ' ';
     console.log(`  [${check}] ${t.id}: ${t.title}`);
   }
   console.log();
 }
 
-async function list(filter?: 'done' | 'pending') {
-  const query =
-    filter === 'done' ? { completed: true } : filter === 'pending' ? { completed: false } : undefined;
-  const result = (await client.todos.list(query ? { query } : undefined)) as { todos: Todo[]; count: number };
-  console.log(`\n${result.count} todo(s):`);
-  printTodos(result.todos);
-}
-
 async function add(title: string) {
-  const todo = (await client.todos.create({ body: { title } })) as Todo;
+  const todo = await client.todos.create({ body: { title } });
   console.log(`\nCreated: [${todo.id}] ${todo.title}\n`);
 }
 
 async function done(id: string) {
   try {
-    const todo = (await client.todos.update({ path: { id }, body: { completed: true } })) as Todo;
+    const todo = await client.todos.update({ path: { id }, body: { completed: true } });
     console.log(`\nMarked done: ${todo.title}\n`);
   } catch {
     console.log(`\nTodo ${id} not found.\n`);
@@ -46,7 +42,7 @@ async function done(id: string) {
 
 async function undo(id: string) {
   try {
-    const todo = (await client.todos.update({ path: { id }, body: { completed: false } })) as Todo;
+    const todo = await client.todos.update({ path: { id }, body: { completed: false } });
     console.log(`\nMarked pending: ${todo.title}\n`);
   } catch {
     console.log(`\nTodo ${id} not found.\n`);
@@ -55,7 +51,7 @@ async function undo(id: string) {
 
 async function rename(id: string, title: string) {
   try {
-    const todo = (await client.todos.update({ path: { id }, body: { title } })) as Todo;
+    const todo = await client.todos.update({ path: { id }, body: { title } });
     console.log(`\nRenamed to: ${todo.title}\n`);
   } catch {
     console.log(`\nTodo ${id} not found.\n`);

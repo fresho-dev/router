@@ -165,9 +165,11 @@ export function createHandler<T extends RouterRoutes>(
       // Create middleware context with empty params initially.
       const context: MiddlewareContext = {
         request,
-        params: { path, query: {}, body: {} },
+        path,
+        query: {},
+        body: {},
         env,
-        ctx,
+        executionCtx: ctx,
       };
 
       // Run middleware chain with validation and handler as final step.
@@ -203,21 +205,24 @@ export function createHandler<T extends RouterRoutes>(
             body = result.data;
           }
 
-          // Update context params with validated values.
-          context.params = { path, query, body };
+          // Update context with validated values.
+          context.query = query;
+          context.body = body;
 
           if (routeDef.handler) {
             // Build unified handler context with middleware extensions.
             const handlerContext = {
               request,
-              params: { path, query, body },
+              path,
+              query,
+              body,
               env,
               executionCtx: ctx,
             } as Parameters<typeof routeDef.handler>[0];
 
             // Copy middleware extensions to handler context.
             for (const key of Object.keys(context)) {
-              if (!['request', 'params', 'env', 'ctx'].includes(key)) {
+              if (!['request', 'path', 'query', 'body', 'env', 'executionCtx'].includes(key)) {
                 (handlerContext as unknown as Record<string, unknown>)[key] = context[key];
               }
             }
