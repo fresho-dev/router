@@ -4,7 +4,7 @@
 
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { basicAuth, jwtAuth, bearerAuth } from './auth.js';
+import { basicAuth, jwtAuth, signJwt, bearerAuth } from './auth.js';
 import type { MiddlewareContext } from '../middleware.js';
 
 describe('Authentication Middleware', () => {
@@ -506,6 +506,208 @@ describe('Authentication Middleware', () => {
       });
 
       await middleware(context, next);
+    });
+  });
+
+  describe('signJwt', () => {
+    const secret = 'test-secret-key';
+
+    it('should create a valid JWT that can be verified', async () => {
+      const token = await signJwt({ uid: 'user-123' }, secret);
+
+      // Token should have 3 parts.
+      const parts = token.split('.');
+      assert.strictEqual(parts.length, 3);
+
+      // Verify with jwtAuth.
+      let verifiedPayload: Record<string, unknown> | null = null;
+      const middleware = jwtAuth({
+        secret,
+        claims: (payload) => {
+          verifiedPayload = payload;
+          return { user: payload.uid };
+        },
+      });
+
+      context.request = new Request('http://example.com/test', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      await middleware(context, next);
+      assert.strictEqual(nextCalled, true);
+      assert.strictEqual(verifiedPayload?.['uid'], 'user-123');
+    });
+
+    it('should set expiration with expiresIn string', async () => {
+      const now = Math.floor(Date.now() / 1000);
+      const token = await signJwt({ uid: 'user-123' }, secret, { expiresIn: '1h' });
+
+      // Decode payload.
+      const payloadB64 = token.split('.')[1];
+      const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
+
+      assert.ok(payload.exp);
+      assert.ok(payload.iat);
+      // exp should be approximately 1 hour from now.
+      assert.ok(payload.exp >= now + 3600 - 5);
+      assert.ok(payload.exp <= now + 3600 + 5);
+    });
+
+    it('should set expiration with expiresIn number (seconds)', async () => {
+      const now = Math.floor(Date.now() / 1000);
+      const token = await signJwt({ uid: 'user-123' }, secret, { expiresIn: 300 });
+
+      const payloadB64 = token.split('.')[1];
+      const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
+
+      assert.ok(payload.exp >= now + 300 - 5);
+      assert.ok(payload.exp <= now + 300 + 5);
+    });
+
+    it('should set notBefore claim', async () => {
+      const now = Math.floor(Date.now() / 1000);
+      const token = await signJwt({ uid: 'user-123' }, secret, { notBefore: '5m' });
+
+      const payloadB64 = token.split('.')[1];
+      const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
+
+      assert.ok(payload.nbf);
+      assert.ok(payload.nbf >= now + 300 - 5);
+      assert.ok(payload.nbf <= now + 300 + 5);
+    });
+
+    it('should set issuer claim', async () => {
+      const token = await signJwt({ uid: 'user-123' }, secret, { issuer: 'my-app' });
+
+      const payloadB64 = token.split('.')[1];
+      const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
+
+      assert.strictEqual(payload.iss, 'my-app');
+    });
+
+    it('should set audience claim', async () => {
+      const token = await signJwt({ uid: 'user-123' }, secret, { audience: 'my-api' });
+
+      const payloadB64 = token.split('.')[1];
+      const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
+
+      assert.strictEqual(payload.aud, 'my-api');
+    });
+
+    it('should set subject claim', async () => {
+      const token = await signJwt({ uid: 'user-123' }, secret, { subject: 'user-123' });
+
+      const payloadB64 = token.split('.')[1];
+      const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
+
+      assert.strictEqual(payload.sub, 'user-123');
+    });
+
+    it('should support multiple duration formats', async () => {
+      const now = Math.floor(Date.now() / 1000);
+
+      // Test seconds.
+      let token = await signJwt({}, secret, { expiresIn: '60s' });
+      let payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      assert.ok(Math.abs(payload.exp - (now + 60)) <= 5);
+
+      // Test minutes.
+      token = await signJwt({}, secret, { expiresIn: '30m' });
+      payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      assert.ok(Math.abs(payload.exp - (now + 1800)) <= 5);
+
+      // Test days.
+      token = await signJwt({}, secret, { expiresIn: '7d' });
+      payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      assert.ok(Math.abs(payload.exp - (now + 7 * 24 * 3600)) <= 5);
+
+      // Test weeks.
+      token = await signJwt({}, secret, { expiresIn: '2w' });
+      payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      assert.ok(Math.abs(payload.exp - (now + 14 * 24 * 3600)) <= 5);
+    });
+
+    it('should throw on invalid duration format', async () => {
+      await assert.rejects(
+        () => signJwt({}, secret, { expiresIn: 'invalid' }),
+        /Invalid duration format/
+      );
+    });
+
+    it('should preserve custom payload claims', async () => {
+      const token = await signJwt(
+        { uid: 'user-123', role: 'admin', custom: { nested: true } },
+        secret
+      );
+
+      const payloadB64 = token.split('.')[1];
+      const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
+
+      assert.strictEqual(payload.uid, 'user-123');
+      assert.strictEqual(payload.role, 'admin');
+      assert.deepStrictEqual(payload.custom, { nested: true });
+    });
+
+    it('should use custom issuedAt timestamp', async () => {
+      const customTime = 1700000000;
+      const token = await signJwt({}, secret, { issuedAt: customTime, expiresIn: '1h' });
+
+      const payloadB64 = token.split('.')[1];
+      const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
+
+      assert.strictEqual(payload.iat, customTime);
+      assert.strictEqual(payload.exp, customTime + 3600);
+    });
+
+    it('should accept Date object for issuedAt', async () => {
+      const customDate = new Date('2024-01-01T00:00:00Z');
+      const expectedTimestamp = Math.floor(customDate.getTime() / 1000);
+      const token = await signJwt({}, secret, { issuedAt: customDate });
+
+      const payloadB64 = token.split('.')[1];
+      const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
+
+      assert.strictEqual(payload.iat, expectedTimestamp);
+    });
+
+    it('should work with ArrayBuffer secret', async () => {
+      const encoder = new TextEncoder();
+      const secretBuffer = encoder.encode('array-buffer-secret').buffer;
+
+      const token = await signJwt({ uid: 'user-123' }, secretBuffer);
+
+      // Verify it can be decoded.
+      const parts = token.split('.');
+      assert.strictEqual(parts.length, 3);
+    });
+
+    it('should produce tokens verifiable by jwtAuth with same secret', async () => {
+      // Sign a token.
+      const token = await signJwt(
+        { uid: 'user-123', email: 'test@example.com' },
+        secret,
+        { expiresIn: '1h', issuer: 'test-app' }
+      );
+
+      // Verify with jwtAuth middleware.
+      const middleware = jwtAuth({
+        secret,
+        claims: (payload) => ({
+          user: { id: payload.uid, email: payload.email },
+        }),
+      });
+
+      context.request = new Request('http://example.com/test', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      const response = await middleware(context, next);
+
+      assert.strictEqual(nextCalled, true);
+      assert.deepStrictEqual((context as { user?: unknown }).user, {
+        id: 'user-123',
+        email: 'test@example.com',
+      });
     });
   });
 });

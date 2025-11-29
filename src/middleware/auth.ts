@@ -109,6 +109,22 @@ export interface JwtPayload {
   [key: string]: unknown;
 }
 
+/** Options for signing a JWT. */
+export interface SignJwtOptions {
+  /** Expiration time (e.g., '1h', '7d', '30m', or seconds as number). */
+  expiresIn?: string | number;
+  /** Not before time (e.g., '5m', or seconds as number). */
+  notBefore?: string | number;
+  /** Issuer claim. */
+  issuer?: string;
+  /** Audience claim. */
+  audience?: string | string[];
+  /** Subject claim. */
+  subject?: string;
+  /** Custom issued-at timestamp (defaults to now). */
+  issuedAt?: number | Date;
+}
+
 /** JWT secret value. */
 type JwtSecret = string | ArrayBuffer | CryptoKey;
 
@@ -191,6 +207,142 @@ async function verifyJwt(
   }
 
   return payload as JwtPayload;
+}
+
+/**
+ * Parses a duration string (e.g., '1h', '7d', '30m') to seconds.
+ */
+function parseDuration(duration: string | number): number {
+  if (typeof duration === 'number') return duration;
+
+  const match = duration.match(/^(\d+)\s*(s|m|h|d|w)$/i);
+  if (!match) {
+    throw new Error(`Invalid duration format: ${duration}. Use formats like '1h', '7d', '30m', '60s'.`);
+  }
+
+  const value = parseInt(match[1], 10);
+  const unit = match[2].toLowerCase();
+
+  switch (unit) {
+    case 's': return value;
+    case 'm': return value * 60;
+    case 'h': return value * 60 * 60;
+    case 'd': return value * 60 * 60 * 24;
+    case 'w': return value * 60 * 60 * 24 * 7;
+    default: throw new Error(`Unknown duration unit: ${unit}`);
+  }
+}
+
+/**
+ * Base64url encodes a string or Uint8Array.
+ */
+function base64urlEncode(data: string | Uint8Array): string {
+  const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
+  const binary = String.fromCharCode(...bytes);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * Signs a JWT token using Web Crypto API (HS256).
+ *
+ * Uses only Web Crypto API, compatible with Cloudflare Workers, Deno, and browsers.
+ *
+ * @param payload - The JWT payload (custom claims)
+ * @param secret - The signing secret (string, ArrayBuffer, or CryptoKey)
+ * @param options - Optional signing options (expiresIn, issuer, etc.)
+ * @returns The signed JWT token string
+ *
+ * @example
+ * ```typescript
+ * // Basic usage
+ * const token = await signJwt(
+ *   { uid: 'user-123', role: 'admin' },
+ *   'your-secret-key',
+ *   { expiresIn: '1h' }
+ * );
+ *
+ * // With all options
+ * const token = await signJwt(
+ *   { uid: 'user-123' },
+ *   process.env.JWT_SECRET,
+ *   {
+ *     expiresIn: '7d',
+ *     notBefore: '5m',
+ *     issuer: 'my-app',
+ *     audience: 'my-api',
+ *     subject: 'user-123',
+ *   }
+ * );
+ * ```
+ */
+export async function signJwt(
+  payload: Record<string, unknown>,
+  secret: JwtSecret,
+  options: SignJwtOptions = {}
+): Promise<string> {
+  const now = options.issuedAt
+    ? (options.issuedAt instanceof Date ? Math.floor(options.issuedAt.getTime() / 1000) : options.issuedAt)
+    : Math.floor(Date.now() / 1000);
+
+  // Build the final payload with registered claims.
+  const finalPayload: JwtPayload = {
+    ...payload,
+    iat: now,
+  };
+
+  if (options.expiresIn !== undefined) {
+    finalPayload.exp = now + parseDuration(options.expiresIn);
+  }
+
+  if (options.notBefore !== undefined) {
+    finalPayload.nbf = now + parseDuration(options.notBefore);
+  }
+
+  if (options.issuer !== undefined) {
+    finalPayload.iss = options.issuer;
+  }
+
+  if (options.audience !== undefined) {
+    finalPayload.aud = options.audience;
+  }
+
+  if (options.subject !== undefined) {
+    finalPayload.sub = options.subject;
+  }
+
+  // Create header.
+  const header = { alg: 'HS256', typ: 'JWT' };
+
+  // Encode header and payload.
+  const headerB64 = base64urlEncode(JSON.stringify(header));
+  const payloadB64 = base64urlEncode(JSON.stringify(finalPayload));
+  const data = `${headerB64}.${payloadB64}`;
+
+  // Import key for signing.
+  let key: CryptoKey;
+  if (secret instanceof CryptoKey) {
+    key = secret;
+  } else {
+    const keyData = typeof secret === 'string' ? new TextEncoder().encode(secret) : secret;
+    key = await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+  }
+
+  // Sign the data.
+  const signatureBuffer = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(data)
+  );
+
+  const signatureB64 = base64urlEncode(new Uint8Array(signatureBuffer));
+
+  return `${data}.${signatureB64}`;
 }
 
 /**
