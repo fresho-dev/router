@@ -185,6 +185,64 @@ describe('standalone router', () => {
       assert.strictEqual(res.status, 200);
     });
 
+    it('matches HEAD requests to GET routes per RFC 9110', async () => {
+      const handler = createHandler(
+        router('', {
+          test: route({
+            method: 'get',
+            path: '/test',
+            handler: async () => Response.json({ data: 'hello' }),
+          }),
+        })
+      );
+
+      // HEAD should match GET route and return 200.
+      const res = await handler(new Request('http://localhost/test', { method: 'HEAD' }));
+      assert.strictEqual(res.status, 200);
+
+      // Body must be empty for HEAD requests per RFC 9110.
+      const body = await res.text();
+      assert.strictEqual(body, '');
+    });
+
+    it('returns 404 for HEAD when no GET route exists', async () => {
+      const handler = createHandler(
+        router('', {
+          test: route({
+            method: 'post',
+            path: '/test',
+            handler: async () => Response.json({ ok: true }),
+          }),
+        })
+      );
+
+      // HEAD only matches GET routes, not POST.
+      const res = await handler(new Request('http://localhost/test', { method: 'HEAD' }));
+      assert.strictEqual(res.status, 404);
+    });
+
+    it('prefers explicit HEAD route over GET fallback', async () => {
+      const handler = createHandler(
+        router('', {
+          // HEAD defined first - will match before GET fallback.
+          testHead: route({
+            method: 'head',
+            path: '/test',
+            handler: async () => new Response(null, { status: 204 }),
+          }),
+          testGet: route({
+            method: 'get',
+            path: '/test',
+            handler: async () => Response.json({ data: 'from get' }),
+          }),
+        })
+      );
+
+      // Explicit HEAD route takes precedence (first match wins).
+      const res = await handler(new Request('http://localhost/test', { method: 'HEAD' }));
+      assert.strictEqual(res.status, 204);
+    });
+
     it('uses router base path', async () => {
       const handler = createHandler(
         router('/api', {

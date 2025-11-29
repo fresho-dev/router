@@ -132,6 +132,23 @@ function compileRoutes(
   return compiled;
 }
 
+/**
+ * Strips the body from a response for HEAD requests.
+ *
+ * Per RFC 9110, HEAD responses must have the same headers as GET but no body.
+ * Note: The GET handler is fully executed to generate headers. To optimize
+ * HEAD requests, check `request.method === 'HEAD'` in your handler to skip
+ * expensive operations.
+ */
+function stripBodyForHead(response: Response, isHead: boolean): Response {
+  if (!isHead) return response;
+  return new Response(null, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
 /** Creates a fetch handler from a router definition. */
 export function createHandler<T extends RouterRoutes>(
   routerDef: Router<T>
@@ -145,11 +162,18 @@ export function createHandler<T extends RouterRoutes>(
   ): Promise<Response> => {
     const url = new URL(request.url);
     const method = request.method.toUpperCase();
+    const isHead = method === 'HEAD';
 
     // Find matching route.
     for (const compiled of compiledRoutes) {
-      // For OPTIONS requests, match by path only to allow CORS preflight handling
-      if (method !== 'OPTIONS' && compiled.method !== method) continue;
+      // Match routes by method, with special cases:
+      // - OPTIONS: match any route for CORS preflight handling
+      // - HEAD: match GET routes per RFC 9110 (handler runs, body stripped)
+      const methodMatches =
+        compiled.method === method ||
+        method === 'OPTIONS' ||
+        (method === 'HEAD' && compiled.method === 'GET');
+      if (!methodMatches) continue;
 
       const match = compiled.pattern.exec(url.pathname);
       if (!match) continue;
@@ -173,9 +197,9 @@ export function createHandler<T extends RouterRoutes>(
       };
 
       // Run middleware chain with validation and handler as final step.
-      // Always run if there's middleware, handler, or schemas to validate
+      // Always run if there's middleware, handler, or schemas to validate.
       if (compiled.middleware.length > 0 || routeDef.handler || compiled.querySchema || compiled.bodySchema) {
-        return runMiddleware(compiled.middleware, context, async () => {
+        const response = await runMiddleware(compiled.middleware, context, async () => {
           // Validate query params using pre-compiled schema.
           const routeId = `${compiled.method} ${url.pathname}`;
           let query: unknown = {};
@@ -237,10 +261,11 @@ export function createHandler<T extends RouterRoutes>(
           // No handler defined.
           return Response.json({});
         });
+        return stripBodyForHead(response, isHead);
       }
 
       // No handler defined and no middleware.
-      return Response.json({});
+      return stripBodyForHead(Response.json({}), isHead);
     }
 
     // No matching route found.

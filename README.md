@@ -46,6 +46,7 @@ export default { fetch: api.handler() };
 - **OpenAPI generation** — auto-generate docs from your routes
 - **Middleware** — cors, auth, rate limiting, and more
 - **Streaming** — SSE and JSON lines helpers
+- **HTTP-compliant** — automatic HEAD support for GET routes
 - **Zero dependencies** — just Web APIs
 
 ## Installation
@@ -162,11 +163,11 @@ import { cors, errorHandler, jwtAuth } from 'typed-routes/middleware';
 
 const api = router('/api', {
   hello: route({ method: 'get', path: '/hello', handler: ... }),
-}, [
+},
   cors(),
   errorHandler(),
   jwtAuth({ secret: process.env.JWT_SECRET, claims: (p) => ({ user: p.sub }) }),
-]);
+);
 ```
 
 Built-in middleware: `cors`, `errorHandler`, `logger`, `rateLimit`, `requestId`, `timeout`, `basicAuth`, `bearerAuth`, `jwtAuth`, `contentType`.
@@ -367,14 +368,14 @@ const api = router('/api', {
       return { users: results, requestedBy: c.user.id };
     },
   }),
-}, [
+},
   jwtAuth<AppContext>({
     secret: (ctx) => ctx.env.JWT_SECRET,  // ctx.env is typed
     claims: (payload) => ({
       user: { id: payload.sub, email: payload.email },
     }),
   }),
-]);
+);
 
 export default { fetch: api.handler() };
 ```
@@ -392,6 +393,59 @@ client.configure({ env: { DB: mockDb } });
 
 const result = await client.users();
 assert.ok(result.users);
+```
+
+## HEAD Requests
+
+Per [RFC 9110](https://httpwg.org/specs/rfc9110.html#HEAD), HEAD requests are automatically handled for any GET route. The GET handler runs and the response body is stripped.
+
+```typescript
+const api = router('/api', {
+  users: route({
+    method: 'get',
+    path: '/users',
+    handler: async () => {
+      const users = await db.getUsers(); // This runs for both GET and HEAD
+      return { users };
+    },
+  }),
+});
+
+// GET /api/users  → 200 with body: {"users":[...]}
+// HEAD /api/users → 200 with no body (same headers)
+```
+
+> **Performance note:** The handler executes fully for HEAD requests, same as GET. This matches the behavior of Express, Django, Flask, and Hono. If your handler has expensive operations you want to skip for HEAD requests, check the request method:
+>
+> ```typescript
+> handler: async (c) => {
+>   if (c.request.method === 'HEAD') {
+>     // Return early with just headers
+>     return new Response(null, {
+>       headers: { 'X-Total-Count': '1000' },
+>     });
+>   }
+>   // Full processing for GET
+>   const users = await db.getUsers();
+>   return { users };
+> }
+> ```
+
+If you need different behavior for HEAD, define an explicit HEAD route before the GET route:
+
+```typescript
+const api = router('/api', {
+  usersHead: route({
+    method: 'head',
+    path: '/users',
+    handler: async () => new Response(null, { status: 200 }),
+  }),
+  usersGet: route({
+    method: 'get',
+    path: '/users',
+    handler: async () => ({ users: await db.getUsers() }),
+  }),
+});
 ```
 
 ## Size
