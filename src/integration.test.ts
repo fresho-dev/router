@@ -1,7 +1,7 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import { createServer, type Server } from 'node:http';
-import { route, router } from './index.js';
+import { route, router, createHttpClient, createLocalClient } from './index.js';
 import { createHandler } from './handler.js';
 
 describe('integration tests', () => {
@@ -101,7 +101,7 @@ describe('integration tests', () => {
 
   describe('httpClient over real HTTP', () => {
     it('fetches health endpoint', async () => {
-      const client = api.httpClient();
+      const client = createHttpClient(api);
       client.configure({ baseUrl: `http://localhost:${port}` });
 
       const result = (await client.health()) as { status: string };
@@ -109,7 +109,7 @@ describe('integration tests', () => {
     });
 
     it('passes query parameters', async () => {
-      const client = api.httpClient();
+      const client = createHttpClient(api);
       client.configure({ baseUrl: `http://localhost:${port}` });
 
       const result = (await client.echo({ query: { message: 'hello world' } })) as { message: string };
@@ -117,7 +117,7 @@ describe('integration tests', () => {
     });
 
     it('handles nested router paths', async () => {
-      const client = api.httpClient();
+      const client = createHttpClient(api);
       client.configure({ baseUrl: `http://localhost:${port}` });
 
       const result = (await client.users.list()) as { users: Array<{ id: number; name: string }> };
@@ -126,7 +126,7 @@ describe('integration tests', () => {
     });
 
     it('passes optional query parameters', async () => {
-      const client = api.httpClient();
+      const client = createHttpClient(api);
       client.configure({ baseUrl: `http://localhost:${port}` });
 
       const result = (await client.users.list({ query: { limit: 3 } })) as {
@@ -136,7 +136,7 @@ describe('integration tests', () => {
     });
 
     it('sends POST body', async () => {
-      const client = api.httpClient();
+      const client = createHttpClient(api);
       client.configure({ baseUrl: `http://localhost:${port}` });
 
       const result = (await client.users.create({
@@ -148,14 +148,14 @@ describe('integration tests', () => {
     });
 
     it('handles validation errors', async () => {
-      const client = api.httpClient();
+      const client = createHttpClient(api);
       client.configure({ baseUrl: `http://localhost:${port}` });
 
       await assert.rejects(async () => client.echo(), /Invalid query parameters|400/);
     });
 
     it('handles body validation errors', async () => {
-      const client = api.httpClient();
+      const client = createHttpClient(api);
       client.configure({ baseUrl: `http://localhost:${port}` });
 
       await assert.rejects(
@@ -165,7 +165,7 @@ describe('integration tests', () => {
     });
 
     it('returns 404 for unknown routes', async () => {
-      const client = api.httpClient();
+      const client = createHttpClient(api);
       client.configure({ baseUrl: `http://localhost:${port}` });
 
       await assert.rejects(async () => {
@@ -177,10 +177,10 @@ describe('integration tests', () => {
 
   describe('localClient matches httpClient behavior', () => {
     it('returns same result as httpClient for simple GET', async () => {
-      const http = api.httpClient();
+      const http = createHttpClient(api);
       http.configure({ baseUrl: `http://localhost:${port}` });
 
-      const local = api.localClient();
+      const local = createLocalClient(api);
 
       const httpResult = await http.health();
       const localResult = await local.health();
@@ -189,10 +189,10 @@ describe('integration tests', () => {
     });
 
     it('returns same result as httpClient for GET with query', async () => {
-      const http = api.httpClient();
+      const http = createHttpClient(api);
       http.configure({ baseUrl: `http://localhost:${port}` });
 
-      const local = api.localClient();
+      const local = createLocalClient(api);
 
       const httpResult = await http.echo({ query: { message: 'test' } });
       const localResult = await local.echo({ query: { message: 'test' } });
@@ -201,10 +201,10 @@ describe('integration tests', () => {
     });
 
     it('returns same result as httpClient for nested routes', async () => {
-      const http = api.httpClient();
+      const http = createHttpClient(api);
       http.configure({ baseUrl: `http://localhost:${port}` });
 
-      const local = api.localClient();
+      const local = createLocalClient(api);
 
       const httpResult = await http.users.list({ query: { limit: 5 } });
       const localResult = await local.users.list({ query: { limit: 5 } });
@@ -213,10 +213,10 @@ describe('integration tests', () => {
     });
 
     it('returns same result as httpClient for POST', async () => {
-      const http = api.httpClient();
+      const http = createHttpClient(api);
       http.configure({ baseUrl: `http://localhost:${port}` });
 
-      const local = api.localClient();
+      const local = createLocalClient(api);
 
       const body = { name: 'Bob', email: 'bob@example.com' };
 

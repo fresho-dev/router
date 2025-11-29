@@ -15,10 +15,17 @@ import type {
 import { isRouter, isRoute } from './types.js';
 
 /** Creates an HTTP client from a router. */
-export function createHttpRouterClient<T extends RouterRoutes>(
+export function createHttpClient<T extends RouterRoutes>(
+  routerDef: Router<T>
+): HttpRouterClient<T> {
+  return buildClient(routerDef, '', { current: {} });
+}
+
+/** Internal: builds client recursively with shared config. */
+function buildClient<T extends RouterRoutes>(
   routerDef: Router<T>,
-  parentPath = '',
-  sharedConfig: { current: HttpClientConfig } = { current: {} }
+  parentPath: string,
+  sharedConfig: { current: HttpClientConfig }
 ): HttpRouterClient<T> {
   const fullBasePath = parentPath + routerDef.basePath;
 
@@ -28,13 +35,13 @@ export function createHttpRouterClient<T extends RouterRoutes>(
     },
   } as HttpRouterClient<T>;
 
-  populateHttpClientRoutes(client, routerDef, fullBasePath, sharedConfig);
+  populateRoutes(client, routerDef, fullBasePath, sharedConfig);
 
   return client;
 }
 
 /** Populates route methods on a client object. */
-function populateHttpClientRoutes<T extends RouterRoutes>(
+function populateRoutes<T extends RouterRoutes>(
   target: Record<string, unknown>,
   routerDef: Router<T>,
   basePath: string,
@@ -43,7 +50,7 @@ function populateHttpClientRoutes<T extends RouterRoutes>(
   for (const [key, entry] of Object.entries(routerDef.routes)) {
     if (isRouter(entry)) {
       const nested = {} as Record<string, unknown>;
-      populateHttpClientRoutes(nested, entry, basePath + entry.basePath, sharedConfig);
+      populateRoutes(nested, entry, basePath + entry.basePath, sharedConfig);
       target[key] = nested;
     } else if (isRoute(entry)) {
       target[key] = createHttpRouteFetcher(entry, basePath, sharedConfig);

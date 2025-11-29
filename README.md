@@ -2,10 +2,10 @@
 
 Type-safe routing for Cloudflare Workers, Deno, Bun, and Node.js. Define routes once, get validated handlers, typed clients, and OpenAPI docs.
 
-**~3KB gzipped. Zero dependencies.**
+**~2KB gzipped. Zero dependencies.**
 
 ```typescript
-import { route, router, createHandler } from 'typed-routes';
+import { route, router } from 'typed-routes';
 
 const api = router('/api', {
   getUser: route({
@@ -33,7 +33,7 @@ const api = router('/api', {
 });
 
 // Cloudflare Worker / Deno / Bun
-export default { fetch: createHandler(api) };
+export default { fetch: api.handler() };
 ```
 
 ## Features
@@ -157,7 +157,8 @@ const api = router('/api/v1', { users, posts });
 Add middleware to routers:
 
 ```typescript
-import { router, route, cors, errorHandler, logger } from 'typed-routes';
+import { router, route } from 'typed-routes';
+import { cors, errorHandler, logger } from 'typed-routes/middleware';
 
 const api = router('/api', {
   hello: route({ method: 'get', path: '/hello', handler: ... }),
@@ -181,7 +182,7 @@ import {
   basicAuth,      // Basic authentication
   bearerAuth,     // Bearer token auth
   jwtAuth,        // JWT validation
-} from 'typed-routes';
+} from 'typed-routes/middleware';
 ```
 
 ### Custom Middleware
@@ -229,6 +230,8 @@ const api = router('/api', {
 Generate a typed client for your API:
 
 ```typescript
+import { route, router, createHttpClient } from 'typed-routes';
+
 // Server
 const api = router('/api', {
   getUser: route({
@@ -240,7 +243,7 @@ const api = router('/api', {
 });
 
 // Client
-const client = api.httpClient();
+const client = createHttpClient(api);
 client.configure({ baseUrl: 'https://api.example.com' });
 
 const user = await client.getUser({
@@ -255,9 +258,9 @@ const user = await client.getUser({
 Test handlers directly without HTTP overhead:
 
 ```typescript
-import { describe, it } from 'node:test';
+import { createLocalClient } from 'typed-routes';
 
-const client = api.localClient();
+const client = createLocalClient(api);
 client.configure({ env: { DB: mockDb } });
 
 const user = await client.getUser({
@@ -330,12 +333,12 @@ route({
 ## Cloudflare Workers
 
 ```typescript
-import { route, router, createHandler } from 'typed-routes';
+import { route, router } from 'typed-routes';
 
 const api = router('/api', { ... });
 
 export default {
-  fetch: createHandler(api),
+  fetch: api.handler(),
 };
 ```
 
@@ -386,12 +389,17 @@ const profile = route.env<Env>().ctx<AuthContext>()({
 
 | Usage | Minified | Gzipped |
 |-------|----------|---------|
-| Minimal (routing only) | 6.8 KB | 2.7 KB |
-| With middleware | 10.2 KB | 3.9 KB |
+| Core (routing + validation) | 4.2 KB | 1.9 KB |
+| + HTTP client | 5.8 KB | 2.4 KB |
+| + OpenAPI docs | 5.3 KB | 2.3 KB |
+| + cors, errorHandler | 6.5 KB | 2.7 KB |
+| + all middleware | 11.6 KB | 4.4 KB |
+
+Tree-shakeable: only pay for what you import.
 
 For comparison:
-- itty-router: 2.4 KB / 1.2 KB (no validation, no clients)
-- Hono: 20.5 KB / 8.5 KB (no validation included)
+- itty-router: 1.0 KB gzipped (routing only, no validation)
+- Hono: ~14 KB gzipped (routing + middleware, no validation)
 
 ## License
 

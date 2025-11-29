@@ -4,7 +4,7 @@
  * Provides a native fetch handler for routing without framework dependencies.
  */
 
-import type { RouteDefinition, Router, RouterRoutes, ExecutionContext } from './types.js';
+import type { RouteDefinition, Router, RouterRoutes, ExecutionContext, FetchHandler } from './types.js';
 import type { CompiledSchema } from './schema.js';
 import type { Middleware, MiddlewareContext } from './middleware.js';
 import { isRouter, isRoute } from './types.js';
@@ -131,13 +131,6 @@ function compileRoutes(
 
   return compiled;
 }
-
-/** Handler function signature for the standalone router. */
-export type FetchHandler = (
-  request: Request,
-  env?: unknown,
-  ctx?: ExecutionContext
-) => Response | Promise<Response>;
 
 /** Creates a fetch handler from a router definition. */
 export function createHandler<T extends RouterRoutes>(

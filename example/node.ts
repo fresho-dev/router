@@ -5,10 +5,9 @@
  */
 
 import { createServer } from 'node:http';
-import { createHandler } from 'typed-routes';
 import { api } from './server.js';
 
-const handler = createHandler(api);
+const handler = api.handler();
 
 // Adapt Node's http server to use the fetch handler.
 const server = createServer(async (req, res) => {

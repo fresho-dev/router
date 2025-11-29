@@ -1,12 +1,8 @@
 /**
- * @fileoverview Middleware exports for typed-routes.
+ * @fileoverview Middleware implementations for typed-routes.
  *
- * Re-exports all middleware utilities and implementations.
+ * Import via: import { cors, errorHandler } from 'typed-routes/middleware';
  */
-
-// Core middleware utilities
-export type { MiddlewareContext, MiddlewareNext, Middleware } from '../middleware.js';
-export { runMiddleware, compose, forMethods, forPaths, skipPaths } from '../middleware.js';
 
 // CORS middleware
 export type { CorsOptions } from './cors.js';

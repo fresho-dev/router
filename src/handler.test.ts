@@ -4,6 +4,87 @@ import { route, router } from './index.js';
 import { createHandler } from './handler.js';
 import type { MiddlewareContext, MiddlewareNext } from './middleware.js';
 
+describe('router.handler()', () => {
+  it('returns a fetch handler equivalent to createHandler', async () => {
+    const api = router('', {
+      hello: route({
+        method: 'get',
+        path: '/hello',
+        handler: async () => ({ message: 'world' }),
+      }),
+    });
+
+    const handler = api.handler();
+    const res = await handler(new Request('http://localhost/hello'));
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(await res.json(), { message: 'world' });
+  });
+
+  it('works with nested routers', async () => {
+    const api = router('/api', {
+      v1: router('/v1', {
+        users: route({
+          method: 'get',
+          path: '/users',
+          handler: async () => ({ users: [] }),
+        }),
+      }),
+    });
+
+    const handler = api.handler();
+    const res = await handler(new Request('http://localhost/api/v1/users'));
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(await res.json(), { users: [] });
+  });
+
+  it('works with middleware', async () => {
+    const addHeader = async (ctx: MiddlewareContext, next: MiddlewareNext) => {
+      const response = await next();
+      response.headers.set('X-Custom', 'test');
+      return response;
+    };
+
+    const api = router('', {
+      test: route({
+        method: 'get',
+        path: '/test',
+        handler: async () => ({ ok: true }),
+      }),
+    }, [addHeader]);
+
+    const handler = api.handler();
+    const res = await handler(new Request('http://localhost/test'));
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.headers.get('X-Custom'), 'test');
+  });
+
+  it('passes env and ctx to handlers', async () => {
+    const api = router('', {
+      test: route({
+        method: 'get',
+        path: '/test',
+        handler: async (c) => ({
+          hasEnv: c.env !== undefined,
+          envValue: (c.env as { KEY: string }).KEY,
+        }),
+      }),
+    });
+
+    const handler = api.handler();
+    const res = await handler(
+      new Request('http://localhost/test'),
+      { KEY: 'secret' },
+      { waitUntil: () => {}, passThroughOnException: () => {} }
+    );
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(await res.json(), { hasEnv: true, envValue: 'secret' });
+  });
+});
+
 describe('standalone router', () => {
   describe('createHandler()', () => {
     it('returns 404 for unmatched routes', async () => {

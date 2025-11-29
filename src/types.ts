@@ -246,13 +246,20 @@ export function isRoute(entry: unknown): entry is RouteDefinition {
   return typeof entry === 'object' && entry !== null && 'method' in entry;
 }
 
+/** Handler function signature for the standalone router. */
+export type FetchHandler = (
+  request: Request,
+  env?: unknown,
+  ctx?: ExecutionContext
+) => Response | Promise<Response>;
+
 /** Router with base path and nested routes. */
 export interface Router<T extends RouterRoutes> {
   readonly basePath: string;
   readonly routes: T;
   readonly middleware?: Middleware[];
-  httpClient(): HttpRouterClient<T>;
-  localClient(): LocalRouterClient<T>;
+  /** Returns a fetch handler for use with Cloudflare Workers, Deno, Bun, etc. */
+  handler(): FetchHandler;
 }
 
 // =============================================================================

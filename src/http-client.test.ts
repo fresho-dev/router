@@ -1,19 +1,20 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { route, router } from './core.js';
+import { createHttpClient } from './http-client.js';
 
 describe('http-client', () => {
-  describe('httpClient()', () => {
+  describe('createHttpClient()', () => {
     it('returns object with configure method', () => {
-      const client = router('', {}).httpClient();
+      const client = createHttpClient(router('', {}));
       assert.strictEqual(typeof client.configure, 'function');
     });
 
     it('has methods for each route', () => {
-      const client = router('', {
+      const client = createHttpClient(router('', {
         users: route({ method: 'get', path: '/users' }),
         posts: route({ method: 'get', path: '/posts' }),
-      }).httpClient();
+      }));
 
       assert.strictEqual(typeof client.users, 'function');
       assert.strictEqual(typeof client.posts, 'function');
@@ -23,7 +24,7 @@ describe('http-client', () => {
       const inner = router('/inner', {
         test: route({ method: 'get', path: '/test' }),
       });
-      const client = router('/outer', { inner }).httpClient();
+      const client = createHttpClient(router('/outer', { inner }));
 
       assert.strictEqual(typeof client.inner, 'object');
       assert.strictEqual(typeof client.inner.test, 'function');
@@ -33,7 +34,7 @@ describe('http-client', () => {
       const l3 = router('/l3', { r: route({ method: 'get', path: '/r' }) });
       const l2 = router('/l2', { l3 });
       const l1 = router('/l1', { l2 });
-      const client = l1.httpClient();
+      const client = createHttpClient(l1);
 
       assert.strictEqual(typeof client.l2.l3.r, 'function');
     });
@@ -43,7 +44,7 @@ describe('http-client', () => {
         const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
 
         const inner = router('/inner', { test: route({ method: 'get', path: '/test' }) });
-        const client = router('/outer', { inner }).httpClient();
+        const client = createHttpClient(router('/outer', { inner }));
         client.configure({ baseUrl: 'http://test.com' });
 
         await client.inner.test();
@@ -56,9 +57,9 @@ describe('http-client', () => {
       it('adds query params to URL', async (t) => {
         const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
 
-        const client = router('', {
+        const client = createHttpClient(router('', {
           test: route({ method: 'get', path: '/test', query: { a: 'string', b: 'number' } }),
-        }).httpClient();
+        }));
         client.configure({ baseUrl: 'http://test.com' });
 
         await client.test({ query: { a: 'hello', b: 42 } });
@@ -71,9 +72,9 @@ describe('http-client', () => {
       it('omits undefined query params', async (t) => {
         const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
 
-        const client = router('', {
+        const client = createHttpClient(router('', {
           test: route({ method: 'get', path: '/test', query: { a: 'string?', b: 'string?' } }),
-        }).httpClient();
+        }));
         client.configure({ baseUrl: 'http://test.com' });
 
         await client.test({ query: { a: 'hello', b: undefined } });
@@ -86,7 +87,7 @@ describe('http-client', () => {
       it('works without baseUrl (relative paths)', async (t) => {
         const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
 
-        const client = router('/api', { test: route({ method: 'get', path: '/test' }) }).httpClient();
+        const client = createHttpClient(router('/api', { test: route({ method: 'get', path: '/test' }) }));
 
         await client.test();
 
@@ -97,7 +98,7 @@ describe('http-client', () => {
       it('sends configured headers', async (t) => {
         const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
 
-        const client = router('', { test: route({ method: 'get', path: '/test' }) }).httpClient();
+        const client = createHttpClient(router('', { test: route({ method: 'get', path: '/test' }) }));
         client.configure({
           baseUrl: 'http://test.com',
           headers: { Authorization: 'Bearer token123' },
@@ -113,7 +114,7 @@ describe('http-client', () => {
       it('sends per-request headers', async (t) => {
         const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
 
-        const client = router('', { test: route({ method: 'get', path: '/test' }) }).httpClient();
+        const client = createHttpClient(router('', { test: route({ method: 'get', path: '/test' }) }));
         client.configure({ baseUrl: 'http://test.com' });
 
         await client.test({ headers: { 'X-Custom': 'value' } });
@@ -126,7 +127,7 @@ describe('http-client', () => {
       it('per-request headers override configured headers', async (t) => {
         const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
 
-        const client = router('', { test: route({ method: 'get', path: '/test' }) }).httpClient();
+        const client = createHttpClient(router('', { test: route({ method: 'get', path: '/test' }) }));
         client.configure({
           baseUrl: 'http://test.com',
           headers: { 'X-Header': 'config-value' },
@@ -142,9 +143,9 @@ describe('http-client', () => {
       it('sets Content-Type for POST with body', async (t) => {
         const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
 
-        const client = router('', {
+        const client = createHttpClient(router('', {
           test: route({ method: 'post', path: '/test', body: { name: 'string' } }),
-        }).httpClient();
+        }));
         client.configure({ baseUrl: 'http://test.com' });
 
         await client.test({ body: { name: 'alice' } });
@@ -157,9 +158,9 @@ describe('http-client', () => {
       it('sends JSON body for POST', async (t) => {
         const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
 
-        const client = router('', {
+        const client = createHttpClient(router('', {
           test: route({ method: 'post', path: '/test', body: { name: 'string' } }),
-        }).httpClient();
+        }));
         client.configure({ baseUrl: 'http://test.com' });
 
         await client.test({ body: { name: 'alice' } });
@@ -171,7 +172,7 @@ describe('http-client', () => {
       it('parses JSON response', async (t) => {
         t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ result: 'success' })));
 
-        const client = router('', { test: route({ method: 'get', path: '/test' }) }).httpClient();
+        const client = createHttpClient(router('', { test: route({ method: 'get', path: '/test' }) }));
         client.configure({ baseUrl: 'http://test.com' });
 
         const result = await client.test();
@@ -181,7 +182,7 @@ describe('http-client', () => {
       it('throws on non-ok response', async (t) => {
         t.mock.method(globalThis, 'fetch', async () => new Response('Not Found', { status: 404 }));
 
-        const client = router('', { test: route({ method: 'get', path: '/test' }) }).httpClient();
+        const client = createHttpClient(router('', { test: route({ method: 'get', path: '/test' }) }));
         client.configure({ baseUrl: 'http://test.com' });
 
         await assert.rejects(async () => client.test(), /Not Found/);
@@ -190,13 +191,13 @@ describe('http-client', () => {
       it('uses correct HTTP method', async (t) => {
         const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
 
-        const client = router('', {
+        const client = createHttpClient(router('', {
           get: route({ method: 'get', path: '/get' }),
           post: route({ method: 'post', path: '/post' }),
           put: route({ method: 'put', path: '/put' }),
           patch: route({ method: 'patch', path: '/patch' }),
           del: route({ method: 'delete', path: '/delete' }),
-        }).httpClient();
+        }));
         client.configure({ baseUrl: 'http://test.com' });
 
         await client.get();
@@ -218,9 +219,9 @@ describe('http-client', () => {
       it('substitutes single path parameter', async (t) => {
         const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
 
-        const client = router('', {
+        const client = createHttpClient(router('', {
           getUser: route({ method: 'get', path: '/users/:id' }),
-        }).httpClient();
+        }));
         client.configure({ baseUrl: 'http://test.com' });
 
         await client.getUser({ path: { id: '123' } });
@@ -232,9 +233,9 @@ describe('http-client', () => {
       it('substitutes multiple path parameters', async (t) => {
         const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
 
-        const client = router('', {
+        const client = createHttpClient(router('', {
           getPost: route({ method: 'get', path: '/users/:userId/posts/:postId' }),
-        }).httpClient();
+        }));
         client.configure({ baseUrl: 'http://test.com' });
 
         await client.getPost({ path: { userId: 'u1', postId: 'p2' } });
@@ -246,9 +247,9 @@ describe('http-client', () => {
       it('substitutes path params with query params', async (t) => {
         const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
 
-        const client = router('', {
+        const client = createHttpClient(router('', {
           getUser: route({ method: 'get', path: '/users/:id', query: { include: 'string?' } }),
-        }).httpClient();
+        }));
         client.configure({ baseUrl: 'http://test.com' });
 
         await client.getUser({ path: { id: '456' }, query: { include: 'posts' } });
@@ -264,7 +265,7 @@ describe('http-client', () => {
         const users = router('/users', {
           getOne: route({ method: 'get', path: '/:id' }),
         });
-        const client = router('/api', { users }).httpClient();
+        const client = createHttpClient(router('/api', { users }));
         client.configure({ baseUrl: 'http://test.com' });
 
         await client.users.getOne({ path: { id: '789' } });

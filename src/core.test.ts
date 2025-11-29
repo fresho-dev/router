@@ -68,10 +68,9 @@ describe('core', () => {
       assert.strictEqual(level1.routes.level2.routes.level3.routes.r.path, '/r');
     });
 
-    it('provides httpClient() and localClient() methods', () => {
+    it('provides handler() method', () => {
       const r = router('/api', {});
-      assert.strictEqual(typeof r.httpClient, 'function');
-      assert.strictEqual(typeof r.localClient, 'function');
+      assert.strictEqual(typeof r.handler, 'function');
     });
 
     it('handles empty base path', () => {

@@ -15,11 +15,18 @@ import type {
 import { isRouter, isRoute } from './types.js';
 import { compileSchema } from './schema.js';
 
-/** Creates a local client from a router. */
-export function createLocalRouterClient<T extends RouterRoutes>(
+/** Creates a local client from a router (for testing without HTTP). */
+export function createLocalClient<T extends RouterRoutes>(
+  routerDef: Router<T>
+): LocalRouterClient<T> {
+  return buildClient(routerDef, '', { current: {} });
+}
+
+/** Internal: builds client recursively with shared config. */
+function buildClient<T extends RouterRoutes>(
   routerDef: Router<T>,
-  parentPath = '',
-  sharedConfig: { current: LocalClientConfig } = { current: {} }
+  parentPath: string,
+  sharedConfig: { current: LocalClientConfig }
 ): LocalRouterClient<T> {
   const fullBasePath = parentPath + routerDef.basePath;
 
@@ -29,13 +36,13 @@ export function createLocalRouterClient<T extends RouterRoutes>(
     },
   } as LocalRouterClient<T>;
 
-  populateLocalClientRoutes(client, routerDef, fullBasePath, sharedConfig);
+  populateRoutes(client, routerDef, fullBasePath, sharedConfig);
 
   return client;
 }
 
 /** Populates route methods on a local client object. */
-function populateLocalClientRoutes<T extends RouterRoutes>(
+function populateRoutes<T extends RouterRoutes>(
   target: Record<string, unknown>,
   routerDef: Router<T>,
   basePath: string,
@@ -44,7 +51,7 @@ function populateLocalClientRoutes<T extends RouterRoutes>(
   for (const [key, entry] of Object.entries(routerDef.routes)) {
     if (isRouter(entry)) {
       const nested = {} as Record<string, unknown>;
-      populateLocalClientRoutes(nested, entry, basePath + entry.basePath, sharedConfig);
+      populateRoutes(nested, entry, basePath + entry.basePath, sharedConfig);
       target[key] = nested;
     } else if (isRoute(entry)) {
       target[key] = createLocalRouteInvoker(entry, basePath, sharedConfig);

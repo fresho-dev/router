@@ -2,7 +2,8 @@
  * Server implementation - defines the API with handlers.
  */
 
-import { route, router, cors, errorHandler } from 'typed-routes';
+import { route, router, createHttpClient } from 'typed-routes';
+import { cors, errorHandler } from 'typed-routes/middleware';
 
 // Shared types.
 export interface Todo {
@@ -116,4 +117,4 @@ export const api = router(
 );
 
 /** Typed HTTP client - import this on the client side. */
-export const client = api.httpClient();
+export const client = createHttpClient(api);

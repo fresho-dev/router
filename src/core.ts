@@ -7,8 +7,7 @@
 import type { SchemaDefinition } from './schema.js';
 import type { RouteDefinition, Router, RouterRoutes } from './types.js';
 import type { Middleware } from './middleware.js';
-import { createHttpRouterClient } from './http-client.js';
-import { createLocalRouterClient } from './local-client.js';
+import { createHandler } from './handler.js';
 
 /** Creates a route definition with inferred types. */
 export function route<
@@ -124,15 +123,13 @@ export function router<T extends RouterRoutes, M extends Middleware<unknown>[]>(
   routes: T,
   middleware?: [...M]
 ): Router<T> {
-  return {
+  const self: Router<T> = {
     basePath,
     routes,
     middleware,
-    httpClient() {
-      return createHttpRouterClient(this);
-    },
-    localClient() {
-      return createLocalRouterClient(this);
+    handler() {
+      return createHandler(self);
     },
   };
+  return self;
 }
