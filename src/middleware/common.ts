@@ -75,10 +75,7 @@ export interface ErrorHandlerOptions {
  *
  * @example
  * ```typescript
- * const apiRouter = router('/api', routes, [
- *   errorHandler({ expose: false }),
- *   // other middleware...
- * ]);
+ * const apiRouter = router('/api', routes, errorHandler({ expose: false }));
  * ```
  */
 export function errorHandler(options: ErrorHandlerOptions = {}): Middleware {
@@ -152,9 +149,7 @@ export interface LogInfo {
  *
  * @example
  * ```typescript
- * const apiRouter = router('/api', routes, [
- *   logger({ includeHeaders: true })
- * ]);
+ * const apiRouter = router('/api', routes, logger({ includeHeaders: true }));
  * ```
  */
 export function logger(options: LoggerOptions = {}): Middleware {
@@ -323,9 +318,7 @@ export interface RateLimitOptions {
  *
  * @example
  * ```typescript
- * const apiRouter = router('/api', routes, [
- *   rateLimit({ max: 100, windowMs: 60000 })
- * ]);
+ * const apiRouter = router('/api', routes, rateLimit({ max: 100, windowMs: 60000 }));
  * ```
  */
 export function rateLimit(options: RateLimitOptions = {}): Middleware {
@@ -403,9 +396,7 @@ export interface RequestIdOptions {
  *
  * @example
  * ```typescript
- * const apiRouter = router('/api', routes, [
- *   requestId({ headerName: 'X-Request-ID' })
- * ]);
+ * const apiRouter = router('/api', routes, requestId({ headerName: 'X-Request-ID' }));
  * ```
  */
 export function requestId(options: RequestIdOptions = {}): Middleware {
@@ -454,9 +445,7 @@ export interface TimeoutOptions {
  *
  * @example
  * ```typescript
- * const apiRouter = router('/api', routes, [
- *   timeout({ timeout: 5000 })
- * ]);
+ * const apiRouter = router('/api', routes, timeout({ timeout: 5000 }));
  * ```
  */
 export function timeout(options: TimeoutOptions): Middleware {
@@ -506,9 +495,7 @@ export interface ContentTypeOptions {
  *
  * @example
  * ```typescript
- * const apiRouter = router('/api', routes, [
- *   contentType({ types: ['application/json'] })
- * ]);
+ * const apiRouter = router('/api', routes, contentType({ types: ['application/json'] }));
  * ```
  */
 export function contentType(options: ContentTypeOptions): Middleware {

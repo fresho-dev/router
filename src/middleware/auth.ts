@@ -27,7 +27,7 @@ export interface BasicAuthOptions {
  *
  * @example
  * ```typescript
- * const adminRouter = router('/admin', routes, [
+ * const adminRouter = router('/admin', routes,
  *   basicAuth({
  *     verify: async (username, password) => {
  *       if (username === 'admin' && password === 'secret') {
@@ -36,7 +36,7 @@ export interface BasicAuthOptions {
  *       return null;
  *     }
  *   })
- * ]);
+ * );
  * ```
  */
 export function basicAuth(options: BasicAuthOptions): Middleware {
@@ -286,7 +286,7 @@ export interface BearerAuthOptions {
  *
  * @example
  * ```typescript
- * const apiRouter = router('/api', routes, [
+ * const apiRouter = router('/api', routes,
  *   bearerAuth({
  *     verify: async (token) => {
  *       if (token === process.env.API_TOKEN) {
@@ -295,7 +295,7 @@ export interface BearerAuthOptions {
  *       return null;
  *     }
  *   })
- * ]);
+ * );
  * ```
  */
 export function bearerAuth(options: BearerAuthOptions): Middleware {

@@ -63,9 +63,7 @@ function getAllowedOrigin(
  *
  * @example
  * ```typescript
- * const apiRouter = router('/api', routes, [
- *   cors({ origin: 'https://example.com', credentials: true })
- * ]);
+ * const apiRouter = router('/api', routes, cors({ origin: 'https://example.com', credentials: true }));
  * ```
  */
 export function cors(options: CorsOptions = {}): Middleware {

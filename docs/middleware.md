@@ -434,7 +434,7 @@ const healthRouter = router('/health', {
 });
 
 // API routes with logging
-const apiRouter = router('/api', routes, [logger()]);
+const apiRouter = router('/api', routes, logger());
 
 // Combine
 const app = router('', { health: healthRouter, api: apiRouter });
@@ -557,7 +557,7 @@ const security = compose(
   errorHandler(),
 );
 
-const api = router('/api', routes, [security]);
+const api = router('/api', routes, security);
 ```
 
 ---

@@ -34,7 +34,7 @@ describe('Middleware Integration', () => {
             handler: async () => Response.json({ posts: [] }),
           }),
         },
-        [loggingMiddleware]
+        loggingMiddleware
       );
 
       const handler = createHandler(apiRouter);
@@ -89,7 +89,7 @@ describe('Middleware Integration', () => {
             },
           }),
         },
-        [v1Middleware]
+        v1Middleware
       );
 
       const apiRouter = router(
@@ -97,7 +97,7 @@ describe('Middleware Integration', () => {
         {
           v1: v1Router,
         },
-        [apiMiddleware]
+        apiMiddleware
       );
 
       const mainRouter = router(
@@ -105,7 +105,7 @@ describe('Middleware Integration', () => {
         {
           api: apiRouter,
         },
-        [globalMiddleware]
+        globalMiddleware
       );
 
       const handler = createHandler(mainRouter);
@@ -137,7 +137,7 @@ describe('Middleware Integration', () => {
             handler: async () => Response.json({ data: 'test' }),
           }),
         },
-        [cors({ origin: 'https://example.com', credentials: true })]
+        cors({ origin: 'https://example.com', credentials: true })
       );
 
       const handler = createHandler(apiRouter);
@@ -193,16 +193,14 @@ describe('Middleware Integration', () => {
             },
           }),
         },
-        [
-          basicAuth({
-            verify: async (username, password) => {
-              if (username === 'admin' && password === 'secret') {
-                return { user: username };
-              }
-              return null;
-            },
-          }),
-        ]
+        basicAuth({
+          verify: async (username, password) => {
+            if (username === 'admin' && password === 'secret') {
+              return { user: username };
+            }
+            return null;
+          },
+        })
       );
 
       const handler = createHandler(adminRouter);
@@ -258,11 +256,9 @@ describe('Middleware Integration', () => {
             handler: async () => Response.json({ secret: 'data' }),
           }),
         },
-        [
-          basicAuth({
-            verify: async () => ({ authenticated: true }),
-          }),
-        ]
+        basicAuth({
+          verify: async () => ({ authenticated: true }),
+        })
       );
 
       const mainRouter = router('/', {
@@ -300,7 +296,7 @@ describe('Middleware Integration', () => {
             handler: async () => Response.json({ ok: true }),
           }),
         },
-        [errorHandler({ expose: false })]
+        errorHandler({ expose: false })
       );
 
       const handler = createHandler(apiRouter);
@@ -328,19 +324,17 @@ describe('Middleware Integration', () => {
             handler: async () => Response.json({ success: true }),
           }),
         },
-        [
-          errorHandler(),
-          cors({ origin: '*' }),
-          requestId(),
-          basicAuth({
-            verify: async (u, p) => {
-              if (u === 'user' && p === 'pass') {
-                return { user: u };
-              }
-              return null;
-            },
-          }),
-        ]
+        errorHandler(),
+        cors({ origin: '*' }),
+        requestId(),
+        basicAuth({
+          verify: async (u, p) => {
+            if (u === 'user' && p === 'pass') {
+              return { user: u };
+            }
+            return null;
+          },
+        })
       );
 
       const handler = createHandler(apiRouter);
@@ -394,7 +388,7 @@ describe('Middleware Integration', () => {
             },
           }),
         },
-        [createTrackerMiddleware('v2')]
+        createTrackerMiddleware('v2')
       );
 
       const apiRouter = router(
@@ -402,7 +396,7 @@ describe('Middleware Integration', () => {
         {
           v2: v2Router,
         },
-        [createTrackerMiddleware('api')]
+        createTrackerMiddleware('api')
       );
 
       const mainRouter = router(
@@ -410,7 +404,7 @@ describe('Middleware Integration', () => {
         {
           api: apiRouter,
         },
-        [createTrackerMiddleware('main')]
+        createTrackerMiddleware('main')
       );
 
       const handler = createHandler(mainRouter);
@@ -472,7 +466,7 @@ describe('Middleware Integration', () => {
             },
           }),
         },
-        [addUserMiddleware, checkUserMiddleware, checkAllMiddleware]
+        addUserMiddleware, checkUserMiddleware, checkAllMiddleware
       );
 
       const handler = createHandler(apiRouter);
@@ -516,7 +510,7 @@ describe('Middleware Integration', () => {
             },
           }),
         },
-        [trackingMiddleware]
+        trackingMiddleware
       );
 
       const handler = createHandler(apiRouter);
@@ -580,7 +574,7 @@ describe('Middleware Integration', () => {
             },
           }),
         },
-        [authMiddleware, loggingMiddleware]
+        authMiddleware, loggingMiddleware
       );
 
       const handler = createHandler(apiRouter);
@@ -600,6 +594,51 @@ describe('Middleware Integration', () => {
       );
       assert.strictEqual(response.status, 200);
       assert.deepStrictEqual(executed, ['auth', 'logging', 'handler']);
+    });
+  });
+
+  describe('Typed Middleware', () => {
+    it('should accept typed middleware without casting', async () => {
+      // This test verifies that typed middleware can be passed to router
+      // without needing "as any" casts. This is a compile-time check.
+      interface AuthEnv {
+        JWT_SECRET: string;
+      }
+
+      interface AuthContext {
+        env: AuthEnv;
+        user: { id: string };
+      }
+
+      // Create typed middleware.
+      const typedMiddleware: Middleware<AuthContext> = async (ctx, next) => {
+        // ctx.env.JWT_SECRET is typed
+        ctx.user = { id: 'user-123' };
+        return next();
+      };
+
+      // This should compile without "as any" cast - using rest parameters.
+      const apiRouter = router(
+        '/api',
+        {
+          profile: route.ctx<AuthContext>()({
+            method: 'get',
+            path: '/profile',
+            handler: async (c) => Response.json({ userId: c.user.id }),
+          }),
+        },
+        typedMiddleware  // No array, no cast needed!
+      );
+
+      const handler = createHandler(apiRouter);
+      const response = await handler(
+        new Request('http://localhost/api/profile'),
+        { JWT_SECRET: 'secret' }
+      );
+
+      assert.strictEqual(response.status, 200);
+      const body = await response.json();
+      assert.strictEqual(body.userId, 'user-123');
     });
   });
 });

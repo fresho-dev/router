@@ -52,7 +52,7 @@ describe('router.handler()', () => {
         path: '/test',
         handler: async () => ({ ok: true }),
       }),
-    }, [addHeader]);
+    }, addHeader);
 
     const handler = api.handler();
     const res = await handler(new Request('http://localhost/test'));
@@ -796,7 +796,7 @@ describe('standalone router', () => {
               },
             }),
           },
-          [authMiddleware]
+          authMiddleware
         )
       );
 
@@ -833,7 +833,7 @@ describe('standalone router', () => {
               },
             }),
           },
-          [authMiddleware, permissionsMiddleware]
+          authMiddleware, permissionsMiddleware
         )
       );
 
@@ -869,7 +869,7 @@ describe('standalone router', () => {
               },
             }),
           },
-          [dbMiddleware]
+          dbMiddleware
         )
       );
 
@@ -925,7 +925,7 @@ describe('standalone router', () => {
               },
             }),
           },
-          [authMiddleware, dbMiddleware]
+          authMiddleware, dbMiddleware
         )
       );
 

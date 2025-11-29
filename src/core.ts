@@ -90,16 +90,34 @@ route.ctx = function <Ctx>(): CtxBuilder<Ctx> {
 };
 
 
-/** Creates a composable router. */
-export function router<T extends RouterRoutes, M extends Middleware<unknown>[]>(
+/** Creates a composable router without middleware. */
+export function router<T extends RouterRoutes>(basePath: string, routes: T): Router<T>;
+
+/**
+ * Creates a composable router with middleware.
+ *
+ * Uses rest parameters with `Middleware<unknown>[]` constraint. Each middleware
+ * is typed independently, avoiding array contravariance issues that would
+ * require `as any` casts for typed middleware like `Middleware<{ env: AuthEnv }>`.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function router<T extends RouterRoutes, M extends Middleware<any>[]>(
   basePath: string,
   routes: T,
-  middleware?: [...M]
+  ...middleware: M
+): Router<T>;
+
+/** Creates a composable router. */
+export function router<T extends RouterRoutes>(
+  basePath: string,
+  routes: T,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ...middleware: Middleware<any>[]
 ): Router<T> {
   const self: Router<T> = {
     basePath,
     routes,
-    middleware,
+    middleware: middleware.length > 0 ? middleware : undefined,
     handler() {
       return createHandler(self);
     },

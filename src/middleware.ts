@@ -98,6 +98,7 @@ export type Middleware<Ctx = {}> = (
   next: MiddlewareNext
 ) => Promise<Response> | Response;
 
+
 /**
  * Runs a chain of middleware with a final handler.
  *
@@ -142,7 +143,7 @@ export async function runMiddleware(
  *   errorHandler(),
  * );
  *
- * const api = router('/api', routes, [security]);
+ * const api = router('/api', routes, security);
  * ```
  *
  * @param middleware - Middleware functions to compose
