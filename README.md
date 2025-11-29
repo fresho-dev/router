@@ -315,6 +315,24 @@ const profile = route.ctx<AppContext>()({
 });
 ```
 
+Chain multiple `.ctx<>()` calls to compose context types:
+
+```typescript
+interface EnvBindings { env: { DB: D1Database } }
+interface AuthContext { user: { id: string } }
+
+// Compose contexts inline - no need to pre-define combined interface
+const data = route.ctx<EnvBindings>().ctx<AuthContext>()({
+  method: 'get',
+  path: '/data',
+  handler: async (c) => {
+    c.env.DB;  // typed from EnvBindings
+    c.user.id; // typed from AuthContext
+    return { userId: c.user.id };
+  },
+});
+```
+
 ## Common Patterns
 
 For detailed middleware patterns including JWT authentication, role-based access control, and mixed public/protected routes, see the **[Middleware Documentation](docs/middleware.md#patterns)**.

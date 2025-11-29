@@ -880,5 +880,63 @@ describe('standalone router', () => {
         dbStatus: 'connected',
       });
     });
+
+    it('supports chained context types with route.ctx<A>().ctx<B>()', async () => {
+      // Define separate context types.
+      interface EnvContext {
+        env: { API_KEY: string };
+      }
+
+      interface AuthContext {
+        user: { id: string; role: string };
+      }
+
+      interface DbContext {
+        dbConnection: string;
+      }
+
+      // Middleware that adds context properties.
+      const authMiddleware = async (ctx: MiddlewareContext, next: MiddlewareNext) => {
+        ctx.user = { id: 'user-123', role: 'admin' };
+        return next();
+      };
+
+      const dbMiddleware = async (ctx: MiddlewareContext, next: MiddlewareNext) => {
+        ctx.dbConnection = 'connected';
+        return next();
+      };
+
+      const handler = createHandler(
+        router(
+          '',
+          {
+            // Chain multiple context types.
+            data: route.ctx<EnvContext>().ctx<AuthContext>().ctx<DbContext>()({
+              method: 'get',
+              path: '/data',
+              handler: async (c) => {
+                // All three context types are merged and typed.
+                return Response.json({
+                  apiKey: c.env.API_KEY,
+                  userId: c.user.id,
+                  userRole: c.user.role,
+                  dbStatus: c.dbConnection,
+                });
+              },
+            }),
+          },
+          [authMiddleware, dbMiddleware]
+        )
+      );
+
+      const res = await handler(new Request('http://localhost/data'), { API_KEY: 'secret-key' });
+      assert.strictEqual(res.status, 200);
+      assert.deepStrictEqual(await res.json(), {
+        apiKey: 'secret-key',
+        userId: 'user-123',
+        userRole: 'admin',
+        dbStatus: 'connected',
+      });
+    });
   });
 });
