@@ -7,13 +7,10 @@ typed-routes provides a composable middleware system for request/response proces
 - [Middleware Basics](#middleware-basics)
 - [Authoring Middleware](#authoring-middleware)
   - [Simple Middleware](#simple-middleware)
-  - [Typed Environment Access](#typed-environment-access)
+  - [Typed Context Access](#typed-context-access)
   - [Adding Context Properties](#adding-context-properties)
 - [Built-in Middleware](#built-in-middleware)
   - [Authentication](#authentication)
-    - [basicAuth](#basicauth)
-    - [bearerAuth](#bearerauth)
-    - [jwtAuth](#jwtauth)
   - [CORS](#cors)
   - [Error Handling](#errorhandler)
   - [Logging](#logger)
@@ -23,10 +20,6 @@ typed-routes provides a composable middleware system for request/response proces
   - [Content Type Validation](#contenttype)
 - [Middleware Utilities](#middleware-utilities)
   - [compose](#compose)
-- [Patterns](#patterns)
-  - [JWT with Typed Context](#jwt-with-typed-context)
-  - [Mixed Public and Protected Routes](#mixed-public-and-protected-routes)
-  - [Role-Based Access Control](#role-based-access-control)
 
 ---
 
@@ -154,161 +147,32 @@ import {
 
 ### Authentication
 
-#### basicAuth
+typed-routes includes several authentication middleware options:
 
-HTTP Basic authentication.
+- **`basicAuth`** - HTTP Basic authentication
+- **`bearerAuth`** - Simple bearer token authentication
+- **`jwtAuth`** - JWT authentication with signature verification
+- **`jwtSign`** - JWT token signing utility
 
-```typescript
-basicAuth({
-  // Required: verify credentials and return claims to merge into context
-  // Return null to reject
-  verify: async (username, password, ctx) => {
-    if (username === 'admin' && password === 'secret') {
-      return { user: { name: username, role: 'admin' } };
-    }
-    return null;
-  },
-  // Optional: realm for WWW-Authenticate header (default: "Secure Area")
-  realm: 'Admin Area',
-})
-```
+For complete documentation, examples, and patterns (cookie-based auth, token refresh, etc.), see the **[Authentication Guide](authentication.md)**.
 
-On success, merges the returned claims object into `ctx`.
-
----
-
-#### bearerAuth
-
-Simple bearer token authentication.
+Quick example:
 
 ```typescript
-bearerAuth({
-  // Required: verify token and return claims to merge into context
-  // Return null to reject
-  verify: async (token, ctx) => {
-    if (token === process.env.API_TOKEN) {
-      return { token, apiClient: 'trusted' };
-    }
-    return null;
-  },
-})
-```
-
-On success, merges the returned claims object into `ctx`.
-
----
-
-#### jwtAuth
-
-JWT authentication with signature verification using Web Crypto API.
-
-```typescript
-jwtAuth({
-  // Required: secret key (string, ArrayBuffer, or CryptoKey)
-  secret: 'your-secret-key',
-
-  // Required: map JWT payload to context properties
-  // Return null to reject the token
-  claims: (payload) => ({
-    user: {
-      id: payload.sub,
-      email: payload.email,
-    },
-  }),
-
-  // Optional: allowed algorithms (default: ['HS256'])
-  algorithms: ['HS256'],
-
-  // Optional: custom token extractor (default: Authorization header or 'token' cookie)
-  getToken: (request) => {
-    return request.headers.get('X-Token');
-  },
-})
-```
-
-**Extracting the secret from environment:**
-
-Use the generic parameter for typed access to environment bindings:
-
-```typescript
-interface AppContext {
-  env: { JWT_SECRET: string };
-}
-
-jwtAuth<AppContext>({
-  secret: (ctx) => ctx.env.JWT_SECRET,  // ctx.env is typed
-  claims: (payload) => ({ user: { id: payload.sub } }),
-})
-```
-
-**The `claims` function:**
-
-The `claims` function maps the JWT payload to context properties. The returned object is merged into the middleware context using `Object.assign(context, claims)`.
-
-- Return an object with the properties you want in the context
-- Return `null` to reject the token (e.g., for role-based filtering)
-
-```typescript
-claims: (payload) => {
-  // Reject non-admin users
-  if (payload.role !== 'admin') return null;
-
-  return {
-    user: { id: payload.sub, role: payload.role },
-    permissions: payload.permissions,
-  };
-}
-```
-
-**Complete example:**
-
-```typescript
-// server.ts
-import { route, router } from 'typed-routes';
 import { jwtAuth } from 'typed-routes/middleware';
 
-interface User {
-  sub: string;
-  email: string;
-}
-
-export const api = router('/api', {
-  profile: route.ctx<{ user: User }>()({
+const api = router('/api', {
+  profile: route.ctx<{ user: { id: string } }>()({
     method: 'get',
     path: '/profile',
-    query: { include: 'string?' },
-    handler: async (c) => ({
-      sub: c.user.sub,
-      email: c.user.email,
-      include: c.query.include,
-    }),
+    handler: async (c) => ({ id: c.user.id }),
   }),
 }, [
   jwtAuth({
-    secret: 'your-secret-key',
-    claims: (payload) => ({
-      user: { sub: payload.sub, email: payload.email },
-    }),
+    secret: process.env.JWT_SECRET,
+    claims: (payload) => ({ user: { id: payload.sub } }),
   }),
 ]);
-
-export default { fetch: api.handler() };
-```
-
-```typescript
-// client.ts
-import { createHttpClient } from 'typed-routes';
-import { api } from './server.js';
-
-const client = createHttpClient(api);
-client.configure({
-  baseUrl: 'https://api.example.com',
-  headers: { Authorization: 'Bearer eyJhbG...' },
-});
-
-// Fully typed: { sub: string, email: string, include: string | undefined }
-const profile = await client.profile({ query: { include: 'settings' } });
-console.log(profile.email);
 ```
 
 ---
@@ -562,127 +426,7 @@ const api = router('/api', routes, security);
 
 ---
 
-## Patterns
-
-### JWT with Typed Context
-
-Complete example of JWT-protected routes with fully typed context:
-
-```typescript
-import { route, router } from 'typed-routes';
-import { jwtAuth, cors, errorHandler } from 'typed-routes/middleware';
-
-// 1. Define the User type
-interface User {
-  id: string;
-  email: string;
-  role: 'admin' | 'user';
-}
-
-// 2. Create the auth middleware with claims mapping
-const auth = jwtAuth({
-  secret: process.env.JWT_SECRET,
-  claims: (payload) => ({
-    user: {
-      id: payload.sub,
-      email: payload.email,
-      role: payload.role,
-    },
-  }),
-});
-
-// 3. Define routes - use route.ctx<{ user: User }>() for protected endpoints
-const api = router('/api', {
-  // Protected route with typed user context
-  profile: route.ctx<{ user: User }>()({
-    method: 'get',
-    path: '/profile',
-    handler: async (c) => {
-      // c.user is typed as User
-      return { id: c.user.id, email: c.user.email };
-    },
-  }),
-}, [cors(), errorHandler(), auth]);
-```
-
-### Mixed Public and Protected Routes
-
-Use nested routers to apply auth only where needed:
-
-```typescript
-// Public routes - no auth
-const publicRoutes = router('/public', {
-  health: route({
-    method: 'get',
-    path: '/health',
-    handler: async () => ({ status: 'ok' }),
-  }),
-});
-
-// Protected routes - with auth middleware
-const protectedRoutes = router('/admin', {
-  dashboard: route.ctx<{ user: User }>()({
-    method: 'get',
-    path: '/dashboard',
-    handler: async (c) => ({ userId: c.user.id }),
-  }),
-}, [jwtAuth({
-  secret: process.env.JWT_SECRET,
-  claims: (payload) => ({ user: { id: payload.sub } }),
-})]);
-
-// Combine into one API
-const api = router('/api', {
-  public: publicRoutes,
-  admin: protectedRoutes,
-});
-
-// Routes:
-// GET /api/public/health  - no auth required
-// GET /api/admin/dashboard - JWT required
-```
-
-### Role-Based Access Control
-
-Use a custom middleware to check roles after JWT authentication:
-
-```typescript
-import type { Middleware } from 'typed-routes';
-
-interface AuthContext {
-  user: { id: string; role: 'admin' | 'user' };
-}
-
-// Middleware that requires admin role
-const requireAdmin: Middleware = async (ctx, next) => {
-  const user = ctx.user as AuthContext['user'] | undefined;
-  if (user?.role !== 'admin') {
-    return new Response(JSON.stringify({ error: 'Admin required' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-  return next();
-};
-
-// Apply to admin-only routes
-const adminRoutes = router('/admin', {
-  users: route.ctx<AuthContext>()({
-    method: 'get',
-    path: '/users',
-    handler: async (c) => ({ requestedBy: c.user.id }),
-  }),
-}, [requireAdmin]);
-
-// Main API with JWT auth
-const api = router('/api', {
-  admin: adminRoutes,
-}, [jwtAuth({ ... })]);
-```
-
----
-
 ## See Also
 
+- [Authentication Guide](authentication.md) - JWT, cookies, token refresh
 - [Main Documentation](../README.md)
-- [TypeScript Types](../src/middleware.ts)

@@ -255,14 +255,14 @@ function base64urlEncode(data: string | Uint8Array): string {
  * @example
  * ```typescript
  * // Basic usage
- * const token = await signJwt(
+ * const token = await jwtSign(
  *   { uid: 'user-123', role: 'admin' },
  *   'your-secret-key',
  *   { expiresIn: '1h' }
  * );
  *
  * // With all options
- * const token = await signJwt(
+ * const token = await jwtSign(
  *   { uid: 'user-123' },
  *   process.env.JWT_SECRET,
  *   {
@@ -275,7 +275,7 @@ function base64urlEncode(data: string | Uint8Array): string {
  * );
  * ```
  */
-export async function signJwt(
+export async function jwtSign(
   payload: Record<string, unknown>,
   secret: JwtSecret,
   options: SignJwtOptions = {}

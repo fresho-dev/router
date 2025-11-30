@@ -6,7 +6,8 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import { router, route } from '../core.js';
 import { createHandler } from '../handler.js';
-import { cors, basicAuth, errorHandler, logger, requestId } from './index.js';
+import { cors, basicAuth, errorHandler, logger, requestId, jwtAuth, jwtSign } from './index.js';
+import { createHttpClient } from '../http-client.js';
 import type { Middleware } from '../middleware.js';
 
 describe('Middleware Integration', () => {
@@ -639,6 +640,312 @@ describe('Middleware Integration', () => {
       assert.strictEqual(response.status, 200);
       const body = await response.json();
       assert.strictEqual(body.userId, 'user-123');
+    });
+  });
+
+  describe('JWT End-to-End with HTTP Client', () => {
+    // This test demonstrates the complete JWT workflow from the client's perspective,
+    // as documented in docs/middleware.md. The client experience is transparent:
+    // sign a token, configure the client, call typed methods.
+
+    const JWT_SECRET = 'test-secret-key';
+
+    // Define user type for the API.
+    interface User {
+      id: string;
+      email: string;
+      role: 'admin' | 'user';
+    }
+
+    interface AppContext {
+      user: User;
+    }
+
+    // Create the protected API.
+    const api = router(
+      '/api',
+      {
+        // Public endpoint - no auth required.
+        health: route({
+          method: 'get',
+          path: '/health',
+          handler: async () => ({ status: 'ok' }),
+        }),
+
+        // Protected endpoint - requires JWT with user context.
+        profile: route.ctx<AppContext>()({
+          method: 'get',
+          path: '/profile',
+          query: { include: 'string?' },
+          handler: async (c) => ({
+            id: c.user.id,
+            email: c.user.email,
+            role: c.user.role,
+            include: c.query.include,
+          }),
+        }),
+
+        // Protected endpoint with POST body.
+        updateProfile: route.ctx<AppContext>()({
+          method: 'post',
+          path: '/profile',
+          body: { displayName: 'string' },
+          handler: async (c) => ({
+            id: c.user.id,
+            displayName: c.body.displayName,
+            updatedBy: c.user.email,
+          }),
+        }),
+      },
+      jwtAuth({
+        secret: JWT_SECRET,
+        claims: (payload) => ({
+          user: {
+            id: payload.sub as string,
+            email: payload.email as string,
+            role: payload.role as 'admin' | 'user',
+          },
+        }),
+      })
+    );
+
+    it('should allow authenticated requests via HTTP client (end-to-end)', async () => {
+      // Step 1: Sign a JWT token (typically done on login).
+      const token = await jwtSign(
+        { email: 'alice@example.com', role: 'admin' },
+        JWT_SECRET,
+        { expiresIn: '1h', subject: 'user-123' }
+      );
+
+      // Step 2: Create HTTP server using Node's createServer.
+      const { createServer } = await import('node:http');
+      const handler = createHandler(api);
+
+      const server = createServer(async (req, res) => {
+        const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
+        const headers = new Headers();
+        for (const [key, value] of Object.entries(req.headers)) {
+          if (value) headers.set(key, Array.isArray(value) ? value.join(', ') : value);
+        }
+        const body = await new Promise<string>((resolve) => {
+          let data = '';
+          req.on('data', (chunk) => (data += chunk));
+          req.on('end', () => resolve(data));
+        });
+        const request = new Request(url.toString(), {
+          method: req.method,
+          headers,
+          body: ['POST', 'PUT', 'PATCH'].includes(req.method ?? '') ? body : undefined,
+        });
+        const response = await handler(request);
+        res.statusCode = response.status;
+        response.headers.forEach((value, key) => res.setHeader(key, value));
+        res.end(await response.text());
+      });
+
+      const port = await new Promise<number>((resolve) => {
+        server.listen(0, () => {
+          const addr = server.address();
+          resolve(typeof addr === 'object' && addr ? addr.port : 0);
+        });
+      });
+
+      try {
+        // Step 3: Configure the HTTP client with the token.
+        const client = createHttpClient(api);
+        client.configure({
+          baseUrl: `http://localhost:${port}`,
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        // Step 4: Make authenticated requests - fully typed!
+        const profile = await client.profile({ query: { include: 'settings' } });
+
+        // Response is fully typed: { id: string, email: string, role: 'admin' | 'user', include: string | undefined }
+        assert.strictEqual(profile.id, 'user-123');
+        assert.strictEqual(profile.email, 'alice@example.com');
+        assert.strictEqual(profile.role, 'admin');
+        assert.strictEqual(profile.include, 'settings');
+
+        // Step 5: Test POST with body.
+        const updated = await client.updateProfile({
+          body: { displayName: 'Alice Smith' },
+        });
+
+        assert.strictEqual(updated.id, 'user-123');
+        assert.strictEqual(updated.displayName, 'Alice Smith');
+        assert.strictEqual(updated.updatedBy, 'alice@example.com');
+      } finally {
+        server.close();
+      }
+    });
+
+    it('should reject unauthenticated requests via HTTP client', async () => {
+      const { createServer } = await import('node:http');
+      const handler = createHandler(api);
+
+      const server = createServer(async (req, res) => {
+        const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
+        const headers = new Headers();
+        for (const [key, value] of Object.entries(req.headers)) {
+          if (value) headers.set(key, Array.isArray(value) ? value.join(', ') : value);
+        }
+        const request = new Request(url.toString(), { method: req.method, headers });
+        const response = await handler(request);
+        res.statusCode = response.status;
+        response.headers.forEach((value, key) => res.setHeader(key, value));
+        res.end(await response.text());
+      });
+
+      const port = await new Promise<number>((resolve) => {
+        server.listen(0, () => {
+          const addr = server.address();
+          resolve(typeof addr === 'object' && addr ? addr.port : 0);
+        });
+      });
+
+      try {
+        const client = createHttpClient(api);
+        client.configure({
+          baseUrl: `http://localhost:${port}`,
+          // No Authorization header.
+        });
+
+        // Unauthenticated request should throw.
+        await assert.rejects(
+          async () => client.profile({}),
+          (error: Error) => {
+            // HTTP client throws on non-2xx status.
+            assert.ok(
+              error.message.includes('401') || error.message.includes('Unauthorized') || error.message.includes('Missing token'),
+              `Expected error about 401/unauthorized, got: ${error.message}`
+            );
+            return true;
+          }
+        );
+      } finally {
+        server.close();
+      }
+    });
+
+    it('should allow authenticated requests via handler directly (no HTTP)', async () => {
+      // For tests without HTTP overhead, call the handler directly with a Request.
+      const token = await jwtSign(
+        { email: 'bob@example.com', role: 'user' },
+        JWT_SECRET,
+        { expiresIn: '1h', subject: 'user-456' }
+      );
+
+      const handler = createHandler(api);
+
+      // Make authenticated request directly.
+      const response = await handler(
+        new Request('http://localhost/api/profile?include=prefs', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+      );
+
+      assert.strictEqual(response.status, 200);
+      const profile = await response.json() as { id: string; email: string; role: string; include?: string };
+
+      assert.strictEqual(profile.id, 'user-456');
+      assert.strictEqual(profile.email, 'bob@example.com');
+      assert.strictEqual(profile.role, 'user');
+      assert.strictEqual(profile.include, 'prefs');
+    });
+
+    it('should reject expired tokens', async () => {
+      // Create an already-expired token.
+      const expiredToken = await jwtSign(
+        { email: 'expired@example.com', role: 'user' },
+        JWT_SECRET,
+        {
+          expiresIn: -3600, // Expired 1 hour ago.
+          subject: 'user-expired',
+        }
+      );
+
+      const handler = createHandler(api);
+
+      const response = await handler(
+        new Request('http://localhost/api/profile', {
+          headers: { Authorization: `Bearer ${expiredToken}` },
+        })
+      );
+
+      assert.strictEqual(response.status, 401);
+      const body = await response.text();
+      assert.ok(body.includes('expired'));
+    });
+
+    it('should support per-request headers for JWT authentication', async () => {
+      // This test demonstrates the pattern from the docs where you pass
+      // the Authorization header per-request instead of globally.
+      const token = await jwtSign(
+        { email: 'charlie@example.com', role: 'user' },
+        JWT_SECRET,
+        { expiresIn: '1h', subject: 'user-789' }
+      );
+
+      const { createServer } = await import('node:http');
+      const handler = createHandler(api);
+
+      const server = createServer(async (req, res) => {
+        const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
+        const headers = new Headers();
+        for (const [key, value] of Object.entries(req.headers)) {
+          if (value) headers.set(key, Array.isArray(value) ? value.join(', ') : value);
+        }
+        const body = await new Promise<string>((resolve) => {
+          let data = '';
+          req.on('data', (chunk) => (data += chunk));
+          req.on('end', () => resolve(data));
+        });
+        const request = new Request(url.toString(), {
+          method: req.method,
+          headers,
+          body: ['POST', 'PUT', 'PATCH'].includes(req.method ?? '') ? body : undefined,
+        });
+        const response = await handler(request);
+        res.statusCode = response.status;
+        response.headers.forEach((value, key) => res.setHeader(key, value));
+        res.end(await response.text());
+      });
+
+      const port = await new Promise<number>((resolve) => {
+        server.listen(0, () => {
+          const addr = server.address();
+          resolve(typeof addr === 'object' && addr ? addr.port : 0);
+        });
+      });
+
+      try {
+        const client = createHttpClient(api);
+        // Only configure baseUrl, not headers.
+        client.configure({ baseUrl: `http://localhost:${port}` });
+
+        // Pass Authorization header per-request.
+        const profile = await client.profile({
+          query: { include: 'settings' },
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        assert.strictEqual(profile.id, 'user-789');
+        assert.strictEqual(profile.email, 'charlie@example.com');
+        assert.strictEqual(profile.role, 'user');
+        assert.strictEqual(profile.include, 'settings');
+
+        // Also works for POST requests with per-request headers.
+        const updated = await client.updateProfile({
+          body: { displayName: 'Charlie Brown' },
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        assert.strictEqual(updated.id, 'user-789');
+        assert.strictEqual(updated.displayName, 'Charlie Brown');
+      } finally {
+        server.close();
+      }
     });
   });
 });

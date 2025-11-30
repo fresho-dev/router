@@ -140,6 +140,98 @@ describe('http-client', () => {
         assert.strictEqual(headers.get('X-Header'), 'request-value');
       });
 
+      it('supports dynamic header functions', async (t) => {
+        const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
+
+        let tokenValue = 'token-1';
+        const client = createHttpClient(router('', { test: route({ method: 'get', path: '/test' }) }));
+        client.configure({
+          baseUrl: 'http://test.com',
+          headers: {
+            'Authorization': () => `Bearer ${tokenValue}`,
+            'X-Static': 'static-value',
+          },
+        });
+
+        // First request uses token-1.
+        await client.test();
+        let init = fetchMock.mock.calls[0].arguments[1] as RequestInit;
+        let headers = new Headers(init.headers);
+        assert.strictEqual(headers.get('Authorization'), 'Bearer token-1');
+        assert.strictEqual(headers.get('X-Static'), 'static-value');
+
+        // Update token and make another request.
+        tokenValue = 'token-2';
+        await client.test();
+        init = fetchMock.mock.calls[1].arguments[1] as RequestInit;
+        headers = new Headers(init.headers);
+        assert.strictEqual(headers.get('Authorization'), 'Bearer token-2');
+      });
+
+      it('skips dynamic headers that return null or undefined', async (t) => {
+        const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
+
+        let token: string | null = null;
+        const client = createHttpClient(router('', { test: route({ method: 'get', path: '/test' }) }));
+        client.configure({
+          baseUrl: 'http://test.com',
+          headers: {
+            'Authorization': () => token ? `Bearer ${token}` : null,
+          },
+        });
+
+        // First request - no token, header should be absent.
+        await client.test();
+        let init = fetchMock.mock.calls[0].arguments[1] as RequestInit;
+        let headers = new Headers(init.headers);
+        assert.strictEqual(headers.get('Authorization'), null);
+
+        // Set token and make another request.
+        token = 'my-token';
+        await client.test();
+        init = fetchMock.mock.calls[1].arguments[1] as RequestInit;
+        headers = new Headers(init.headers);
+        assert.strictEqual(headers.get('Authorization'), 'Bearer my-token');
+      });
+
+      it('supports async header functions', async (t) => {
+        const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
+
+        // Simulate async token refresh.
+        const getToken = async () => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          return 'async-token';
+        };
+
+        const client = createHttpClient(router('', { test: route({ method: 'get', path: '/test' }) }));
+        client.configure({
+          baseUrl: 'http://test.com',
+          headers: {
+            'Authorization': async () => `Bearer ${await getToken()}`,
+          },
+        });
+
+        await client.test();
+        const init = fetchMock.mock.calls[0].arguments[1] as RequestInit;
+        const headers = new Headers(init.headers);
+        assert.strictEqual(headers.get('Authorization'), 'Bearer async-token');
+      });
+
+      it('sends credentials mode when configured', async (t) => {
+        const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
+
+        const client = createHttpClient(router('', { test: route({ method: 'get', path: '/test' }) }));
+        client.configure({
+          baseUrl: 'http://test.com',
+          credentials: 'include',
+        });
+
+        await client.test();
+
+        const init = fetchMock.mock.calls[0].arguments[1] as RequestInit;
+        assert.strictEqual(init.credentials, 'include');
+      });
+
       it('sets Content-Type for POST with body', async (t) => {
         const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({})));
 

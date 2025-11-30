@@ -4,7 +4,7 @@
 
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { basicAuth, jwtAuth, signJwt, bearerAuth } from './auth.js';
+import { basicAuth, jwtAuth, jwtSign, bearerAuth } from './auth.js';
 import type { MiddlewareContext } from '../middleware.js';
 
 describe('Authentication Middleware', () => {
@@ -509,11 +509,11 @@ describe('Authentication Middleware', () => {
     });
   });
 
-  describe('signJwt', () => {
+  describe('jwtSign', () => {
     const secret = 'test-secret-key';
 
     it('should create a valid JWT that can be verified', async () => {
-      const token = await signJwt({ uid: 'user-123' }, secret);
+      const token = await jwtSign({ uid: 'user-123' }, secret);
 
       // Token should have 3 parts.
       const parts = token.split('.');
@@ -540,7 +540,7 @@ describe('Authentication Middleware', () => {
 
     it('should set expiration with expiresIn string', async () => {
       const now = Math.floor(Date.now() / 1000);
-      const token = await signJwt({ uid: 'user-123' }, secret, { expiresIn: '1h' });
+      const token = await jwtSign({ uid: 'user-123' }, secret, { expiresIn: '1h' });
 
       // Decode payload.
       const payloadB64 = token.split('.')[1];
@@ -555,7 +555,7 @@ describe('Authentication Middleware', () => {
 
     it('should set expiration with expiresIn number (seconds)', async () => {
       const now = Math.floor(Date.now() / 1000);
-      const token = await signJwt({ uid: 'user-123' }, secret, { expiresIn: 300 });
+      const token = await jwtSign({ uid: 'user-123' }, secret, { expiresIn: 300 });
 
       const payloadB64 = token.split('.')[1];
       const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
@@ -566,7 +566,7 @@ describe('Authentication Middleware', () => {
 
     it('should set notBefore claim', async () => {
       const now = Math.floor(Date.now() / 1000);
-      const token = await signJwt({ uid: 'user-123' }, secret, { notBefore: '5m' });
+      const token = await jwtSign({ uid: 'user-123' }, secret, { notBefore: '5m' });
 
       const payloadB64 = token.split('.')[1];
       const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
@@ -577,7 +577,7 @@ describe('Authentication Middleware', () => {
     });
 
     it('should set issuer claim', async () => {
-      const token = await signJwt({ uid: 'user-123' }, secret, { issuer: 'my-app' });
+      const token = await jwtSign({ uid: 'user-123' }, secret, { issuer: 'my-app' });
 
       const payloadB64 = token.split('.')[1];
       const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
@@ -586,7 +586,7 @@ describe('Authentication Middleware', () => {
     });
 
     it('should set audience claim', async () => {
-      const token = await signJwt({ uid: 'user-123' }, secret, { audience: 'my-api' });
+      const token = await jwtSign({ uid: 'user-123' }, secret, { audience: 'my-api' });
 
       const payloadB64 = token.split('.')[1];
       const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
@@ -595,7 +595,7 @@ describe('Authentication Middleware', () => {
     });
 
     it('should set subject claim', async () => {
-      const token = await signJwt({ uid: 'user-123' }, secret, { subject: 'user-123' });
+      const token = await jwtSign({ uid: 'user-123' }, secret, { subject: 'user-123' });
 
       const payloadB64 = token.split('.')[1];
       const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
@@ -607,35 +607,35 @@ describe('Authentication Middleware', () => {
       const now = Math.floor(Date.now() / 1000);
 
       // Test seconds.
-      let token = await signJwt({}, secret, { expiresIn: '60s' });
+      let token = await jwtSign({}, secret, { expiresIn: '60s' });
       let payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
       assert.ok(Math.abs(payload.exp - (now + 60)) <= 5);
 
       // Test minutes.
-      token = await signJwt({}, secret, { expiresIn: '30m' });
+      token = await jwtSign({}, secret, { expiresIn: '30m' });
       payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
       assert.ok(Math.abs(payload.exp - (now + 1800)) <= 5);
 
       // Test days.
-      token = await signJwt({}, secret, { expiresIn: '7d' });
+      token = await jwtSign({}, secret, { expiresIn: '7d' });
       payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
       assert.ok(Math.abs(payload.exp - (now + 7 * 24 * 3600)) <= 5);
 
       // Test weeks.
-      token = await signJwt({}, secret, { expiresIn: '2w' });
+      token = await jwtSign({}, secret, { expiresIn: '2w' });
       payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
       assert.ok(Math.abs(payload.exp - (now + 14 * 24 * 3600)) <= 5);
     });
 
     it('should throw on invalid duration format', async () => {
       await assert.rejects(
-        () => signJwt({}, secret, { expiresIn: 'invalid' }),
+        () => jwtSign({}, secret, { expiresIn: 'invalid' }),
         /Invalid duration format/
       );
     });
 
     it('should preserve custom payload claims', async () => {
-      const token = await signJwt(
+      const token = await jwtSign(
         { uid: 'user-123', role: 'admin', custom: { nested: true } },
         secret
       );
@@ -650,7 +650,7 @@ describe('Authentication Middleware', () => {
 
     it('should use custom issuedAt timestamp', async () => {
       const customTime = 1700000000;
-      const token = await signJwt({}, secret, { issuedAt: customTime, expiresIn: '1h' });
+      const token = await jwtSign({}, secret, { issuedAt: customTime, expiresIn: '1h' });
 
       const payloadB64 = token.split('.')[1];
       const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
@@ -662,7 +662,7 @@ describe('Authentication Middleware', () => {
     it('should accept Date object for issuedAt', async () => {
       const customDate = new Date('2024-01-01T00:00:00Z');
       const expectedTimestamp = Math.floor(customDate.getTime() / 1000);
-      const token = await signJwt({}, secret, { issuedAt: customDate });
+      const token = await jwtSign({}, secret, { issuedAt: customDate });
 
       const payloadB64 = token.split('.')[1];
       const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
@@ -674,7 +674,7 @@ describe('Authentication Middleware', () => {
       const encoder = new TextEncoder();
       const secretBuffer = encoder.encode('array-buffer-secret').buffer;
 
-      const token = await signJwt({ uid: 'user-123' }, secretBuffer);
+      const token = await jwtSign({ uid: 'user-123' }, secretBuffer);
 
       // Verify it can be decoded.
       const parts = token.split('.');
@@ -683,7 +683,7 @@ describe('Authentication Middleware', () => {
 
     it('should produce tokens verifiable by jwtAuth with same secret', async () => {
       // Sign a token.
-      const token = await signJwt(
+      const token = await jwtSign(
         { uid: 'user-123', email: 'test@example.com' },
         secret,
         { expiresIn: '1h', issuer: 'test-app' }

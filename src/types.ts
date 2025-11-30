@@ -304,10 +304,19 @@ type RouteClientMethod<
 // HTTP Client Types
 // =============================================================================
 
+/** Header value that can be static or dynamic (sync or async). */
+export type HeaderValue = string | (() => string | null | undefined | Promise<string | null | undefined>);
+
+/** Headers configuration with support for dynamic values. */
+export type DynamicHeaders = Record<string, HeaderValue>;
+
 /** HTTP client configuration. */
 export interface HttpClientConfig {
   baseUrl?: string;
-  headers?: HeadersInit;
+  /** Headers to send with every request. Values can be strings or functions that return strings. */
+  headers?: DynamicHeaders;
+  /** Credentials mode for fetch requests (for cookie-based auth, use 'include'). */
+  credentials?: RequestCredentials;
 }
 
 /** HTTP fetch options for a route. */

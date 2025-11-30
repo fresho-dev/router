@@ -97,7 +97,16 @@ function createHttpRouteFetcher(
     }
 
     // Build headers (config headers, then request headers override).
-    const headers = new Headers(config.headers);
+    // Config headers can be dynamic (sync or async functions), per-request headers are static.
+    const headers = new Headers();
+    if (config.headers) {
+      for (const [key, value] of Object.entries(config.headers)) {
+        const resolved = typeof value === 'function' ? await value() : value;
+        if (resolved != null) {
+          headers.set(key, resolved);
+        }
+      }
+    }
     if (options.headers) {
       new Headers(options.headers).forEach((value, key) => headers.set(key, value));
     }
@@ -106,6 +115,7 @@ function createHttpRouteFetcher(
     const init: RequestInit = {
       method: routeDef.method.toUpperCase(),
       headers,
+      credentials: config.credentials,
     };
 
     if (options.body && ['post', 'put', 'patch'].includes(routeDef.method)) {
