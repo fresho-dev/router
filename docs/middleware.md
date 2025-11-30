@@ -43,7 +43,7 @@ const timing: Middleware = async (ctx, next) => {
 };
 ```
 
-Add middleware to a router as the third argument:
+Add middleware to a router after the routes:
 
 ```typescript
 import { router, route } from 'typed-routes';
@@ -51,7 +51,7 @@ import { cors, errorHandler } from 'typed-routes/middleware';
 
 const api = router('/api', {
   hello: route({ method: 'get', path: '/hello', handler: async () => ({ message: 'Hello' }) }),
-}, [cors(), errorHandler(), timing]);
+}, cors(), errorHandler(), timing);
 ```
 
 ---
@@ -167,12 +167,12 @@ const api = router('/api', {
     path: '/profile',
     handler: async (c) => ({ id: c.user.id }),
   }),
-}, [
+},
   jwtAuth({
     secret: process.env.JWT_SECRET,
     claims: (payload) => ({ user: { id: payload.sub } }),
-  }),
-]);
+  })
+);
 ```
 
 ---

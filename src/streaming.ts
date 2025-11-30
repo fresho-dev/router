@@ -1,7 +1,43 @@
 /**
  * @fileoverview Streaming response utilities for typed-routes.
  *
- * Provides helpers for Server-Sent Events (SSE) and streaming responses.
+ * Provides helpers for Server-Sent Events (SSE) and newline-delimited JSON (NDJSON)
+ * streaming responses. These are useful for real-time updates, progress indicators,
+ * and streaming large datasets.
+ *
+ * Available utilities:
+ * - {@link sseResponse} - Server-Sent Events for real-time browser updates
+ * - {@link streamJsonLines} - NDJSON for streaming JSON objects line by line
+ *
+ * @example
+ * ```typescript
+ * import { route, sseResponse, streamJsonLines } from 'typed-routes';
+ *
+ * // SSE for real-time updates
+ * const events = route({
+ *   method: 'get',
+ *   path: '/events',
+ *   handler: async () => sseResponse(async (send, close) => {
+ *     for (let i = 0; i < 10; i++) {
+ *       send({ event: 'tick', data: { count: i } });
+ *       await sleep(1000);
+ *     }
+ *     close();
+ *   }),
+ * });
+ *
+ * // NDJSON for streaming data
+ * const export = route({
+ *   method: 'get',
+ *   path: '/export',
+ *   handler: async () => streamJsonLines(async (send, close) => {
+ *     for await (const row of database.stream()) {
+ *       send(row);
+ *     }
+ *     close();
+ *   }),
+ * });
+ * ```
  */
 
 /**

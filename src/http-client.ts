@@ -1,7 +1,29 @@
 /**
- * @fileoverview HTTP client implementation.
+ * @fileoverview HTTP client for typed-routes.
  *
- * Provides typed HTTP fetch client for routers.
+ * Provides a fully typed HTTP client that mirrors the router structure.
+ * Each route becomes a method with typed parameters and return values.
+ *
+ * Features:
+ * - Full type inference from router definitions
+ * - Path parameter substitution with URL encoding
+ * - Query parameter serialization
+ * - JSON body serialization
+ * - Dynamic headers (sync or async functions)
+ * - Credentials support for cookie-based auth
+ *
+ * @example
+ * ```typescript
+ * import { createHttpClient } from 'typed-routes';
+ * import { api } from './api.js';
+ *
+ * const client = createHttpClient(api);
+ * client.configure({ baseUrl: 'https://api.example.com' });
+ *
+ * // Typed method calls with full inference
+ * const user = await client.users.get({ path: { id: '123' } });
+ * const created = await client.users.create({ body: { name: 'Alice' } });
+ * ```
  */
 
 import type {
@@ -14,7 +36,42 @@ import type {
 } from './types.js';
 import { isRouter, isRoute } from './types.js';
 
-/** Creates an HTTP client from a router. */
+/**
+ * Creates a typed HTTP client from a router definition.
+ *
+ * The client mirrors the router's structure, with each route becoming a typed
+ * method. Nested routers become nested objects on the client.
+ *
+ * @param routerDef - The router definition to create a client for
+ * @returns A typed client with a `configure` method and route methods
+ *
+ * @example
+ * ```typescript
+ * const api = router('/api', {
+ *   users: router('/users', {
+ *     list: route({ method: 'get', path: '', handler: ... }),
+ *     get: route({ method: 'get', path: '/:id', handler: ... }),
+ *     create: route({ method: 'post', path: '', body: { name: 'string' }, handler: ... }),
+ *   }),
+ * });
+ *
+ * const client = createHttpClient(api);
+ *
+ * // Configure base URL and authentication
+ * client.configure({
+ *   baseUrl: 'https://api.example.com',
+ *   headers: {
+ *     'Authorization': () => `Bearer ${getToken()}`,  // Dynamic header
+ *   },
+ *   credentials: 'include',  // For cookie-based auth
+ * });
+ *
+ * // Call routes with typed parameters
+ * const users = await client.users.list();
+ * const user = await client.users.get({ path: { id: '123' } });
+ * const created = await client.users.create({ body: { name: 'Alice' } });
+ * ```
+ */
 export function createHttpClient<T extends RouterRoutes>(
   routerDef: Router<T>
 ): HttpRouterClient<T> {

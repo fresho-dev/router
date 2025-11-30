@@ -1,8 +1,63 @@
 /**
- * @fileoverview Framework-agnostic type-safe routing library.
+ * @fileoverview typed-routes - Framework-agnostic type-safe routing library.
  *
- * Provides utilities for defining routes with typed query/body schemas,
- * composing routers with nested paths, and generating typed clients.
+ * A zero-dependency routing library that provides end-to-end type safety from
+ * route definition to client consumption. Works with Cloudflare Workers, Deno,
+ * Bun, Node.js, and any fetch-compatible runtime.
+ *
+ * ## Core Concepts
+ *
+ * - **Routes** - Define HTTP endpoints with typed path params, query, body, and response
+ * - **Routers** - Compose routes into hierarchical APIs with shared middleware
+ * - **Clients** - Auto-generated typed HTTP and local clients from router definitions
+ *
+ * ## Quick Start
+ *
+ * ```typescript
+ * import { route, router, createHttpClient } from 'typed-routes';
+ *
+ * // Define routes with full type inference
+ * const api = router('/api', {
+ *   users: router('/users', {
+ *     list: route({ method: 'get', path: '', handler: async () => [] }),
+ *     get: route({
+ *       method: 'get',
+ *       path: '/:id',
+ *       handler: async (c) => ({ id: c.path.id }),
+ *     }),
+ *     create: route({
+ *       method: 'post',
+ *       path: '',
+ *       body: { name: 'string', email: 'string' },
+ *       handler: async (c) => ({ id: '1', ...c.body }),
+ *     }),
+ *   }),
+ * });
+ *
+ * // Server: export fetch handler
+ * export default { fetch: api.handler() };
+ *
+ * // Client: fully typed API calls
+ * const client = createHttpClient(api);
+ * client.configure({ baseUrl: 'https://api.example.com' });
+ *
+ * const users = await client.users.list();
+ * const user = await client.users.get({ path: { id: '123' } });
+ * ```
+ *
+ * ## Exports
+ *
+ * - {@link route} - Define individual routes
+ * - {@link router} - Compose routes into routers
+ * - {@link createHttpClient} - Create typed HTTP client
+ * - {@link createLocalClient} - Create typed local client (no HTTP)
+ * - {@link sseResponse} - Server-Sent Events streaming
+ * - {@link streamJsonLines} - NDJSON streaming
+ *
+ * For authentication middleware, import from `typed-routes/middleware`:
+ * - `jwtAuth` - JWT authentication middleware
+ * - `jwtSign` - Sign JWT tokens
+ * - `jwtVerify` - Verify JWT tokens
  */
 
 // Schema types and compilation.

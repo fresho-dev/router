@@ -63,7 +63,7 @@ type ExtractParamName<T extends string, Acc extends string = ''> =
  * Parses `:param` segments and returns a type representing all parameters.
  * Handles parameters followed by literal suffixes (e.g., `.pdf`, `-suffix`).
  *
- * The runtime `pathToRegex` function in standalone.ts uses the same logic:
+ * The runtime `pathToRegex` function in handler.ts uses the same logic:
  * params are `:[a-zA-Z0-9_]+` and literals (including `.`, `-`) are escaped.
  *
  * @example
@@ -201,7 +201,15 @@ export type TypedHandler<Q, B, P extends string = string, R = unknown, Ctx = {}>
   context: Context<Q, B, P, Ctx>
 ) => R | Response | TypedResponse<R> | Promise<R | Response | TypedResponse<R>>;
 
-/** Route definition with optional handler and response type. */
+/**
+ * Route definition with optional handler and response type.
+ *
+ * @typeParam P - Path string with optional `:param` segments
+ * @typeParam Q - Query parameter schema definition
+ * @typeParam B - Request body schema definition
+ * @typeParam R - Response body type (inferred from handler return)
+ * @typeParam Ctx - Context type for env and middleware-added properties
+ */
 export interface RouteDefinition<
   P extends string = string,
   Q extends SchemaDefinition = {},
@@ -209,11 +217,17 @@ export interface RouteDefinition<
   R = unknown,
   Ctx = {},
 > {
+  /** HTTP method (get, post, put, patch, delete, options, head). */
   method: Method;
+  /** URL path with optional parameters (e.g., '/users/:id'). */
   path: P;
+  /** Query parameter schema for validation. */
   query?: Q;
+  /** Request body schema for validation (POST, PUT, PATCH only). */
   body?: B;
+  /** Optional description for documentation generation. */
   description?: string;
+  /** Request handler function. */
   handler?: TypedHandler<InferSchema<Q>, InferSchema<B>, P, R, Ctx>;
 }
 
@@ -243,12 +257,30 @@ export type FetchHandler = (
   ctx?: ExecutionContext
 ) => Response | Promise<Response>;
 
-/** Router with base path and nested routes. */
+/**
+ * Router with base path, nested routes, and optional middleware.
+ *
+ * Created via the `router()` function. Can be nested within other routers
+ * to create hierarchical API structures.
+ *
+ * @typeParam T - The routes record type
+ */
 export interface Router<T extends RouterRoutes> {
+  /** URL prefix for all routes in this router. */
   readonly basePath: string;
+  /** Route definitions and nested routers. */
   readonly routes: T;
+  /** Middleware applied to all routes in this router. */
   readonly middleware?: Middleware[];
-  /** Returns a fetch handler for use with Cloudflare Workers, Deno, Bun, etc. */
+  /**
+   * Creates a fetch handler for use with Cloudflare Workers, Deno, Bun, etc.
+   *
+   * @example
+   * ```typescript
+   * const api = router('/api', { ... });
+   * export default { fetch: api.handler() };
+   * ```
+   */
   handler(): FetchHandler;
 }
 

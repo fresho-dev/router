@@ -1,7 +1,36 @@
 /**
- * @fileoverview Local client implementation.
+ * @fileoverview Local client for typed-routes.
  *
- * Provides typed local client that invokes handlers directly without HTTP.
+ * Provides a typed client that invokes route handlers directly without HTTP.
+ * Ideal for testing, server-side rendering, or anywhere you need to call
+ * routes programmatically within the same process.
+ *
+ * Unlike the HTTP client, the local client:
+ * - Calls handlers directly (no network overhead)
+ * - Validates query/body schemas before calling handlers
+ * - Provides immediate error feedback for schema violations
+ * - Supports custom env and execution context per call
+ *
+ * @example
+ * ```typescript
+ * import { createLocalClient } from 'typed-routes';
+ * import { api } from './api.js';
+ *
+ * const client = createLocalClient(api);
+ *
+ * // Configure default env/ctx for all calls
+ * client.configure({ env: { DB: database } });
+ *
+ * // Call routes directly (no HTTP)
+ * const users = await client.users.list();
+ * const user = await client.users.get({ path: { id: '123' } });
+ *
+ * // Override env/ctx for a specific call
+ * const result = await client.data.process({
+ *   body: { items: [...] },
+ *   env: { DB: testDatabase },
+ * });
+ * ```
  */
 
 import type {
@@ -15,7 +44,44 @@ import type {
 import { isRouter, isRoute } from './types.js';
 import { compileSchema } from './schema.js';
 
-/** Creates a local client from a router (for testing without HTTP). */
+/**
+ * Creates a typed local client from a router definition.
+ *
+ * The local client mirrors the router's structure and invokes handlers directly
+ * without HTTP overhead. Useful for testing and server-side operations.
+ *
+ * @param routerDef - The router definition to create a client for
+ * @returns A typed client with a `configure` method and route methods
+ *
+ * @example
+ * ```typescript
+ * // Testing example
+ * import { describe, it, expect } from 'vitest';
+ * import { createLocalClient } from 'typed-routes';
+ * import { api } from './api.js';
+ *
+ * describe('Users API', () => {
+ *   const client = createLocalClient(api);
+ *   client.configure({ env: { DB: mockDatabase } });
+ *
+ *   it('creates a user', async () => {
+ *     const user = await client.users.create({
+ *       body: { name: 'Alice', email: 'alice@example.com' },
+ *     });
+ *     expect(user.name).toBe('Alice');
+ *   });
+ * });
+ *
+ * // Server-side rendering example
+ * const client = createLocalClient(api);
+ * client.configure({ env: { DB: database } });
+ *
+ * async function getServerSideProps() {
+ *   const data = await client.posts.list({ query: { limit: 10 } });
+ *   return { props: { posts: data } };
+ * }
+ * ```
+ */
 export function createLocalClient<T extends RouterRoutes>(
   routerDef: Router<T>
 ): LocalRouterClient<T> {

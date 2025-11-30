@@ -1,13 +1,36 @@
 /**
  * @fileoverview Schema types and validation utilities.
  *
- * Provides shorthand schema definitions and validates them without external dependencies.
+ * Provides shorthand schema definitions for validating query parameters and request bodies.
+ * No external dependencies - uses simple string-based type definitions.
  *
- * Supports:
- * - Primitives: 'string', 'number', 'boolean'
- * - Optional primitives: 'string?', 'number?', 'boolean?'
- * - Arrays: 'string[]', 'number[]', 'boolean[]' (and optional variants)
- * - Nested objects: { field: { nested: 'string' } }
+ * Supported types:
+ * - Primitives: `'string'`, `'number'`, `'boolean'`
+ * - Optional: `'string?'`, `'number?'`, `'boolean?'`
+ * - Arrays: `'string[]'`, `'number[]'`, `'boolean[]'`
+ * - Optional arrays: `'string[]?'`, `'number[]?'`, `'boolean[]?'`
+ * - Nested objects: `{ field: { nested: 'string' } }`
+ *
+ * @example
+ * ```typescript
+ * // In route definitions
+ * route({
+ *   method: 'post',
+ *   path: '/users',
+ *   query: { page: 'number?', limit: 'number?' },
+ *   body: {
+ *     name: 'string',
+ *     age: 'number',
+ *     tags: 'string[]?',
+ *     address: { city: 'string', zip: 'string?' },
+ *   },
+ *   handler: async (c) => {
+ *     c.query.page;       // number | undefined
+ *     c.body.name;        // string
+ *     c.body.address.city // string
+ *   },
+ * });
+ * ```
  */
 
 /** Primitive type strings. */
@@ -260,7 +283,31 @@ function validateSchemaDefinition(schema: SchemaDefinition, path: string = ''): 
   }
 }
 
-/** Compiles schema shorthand to a validator. */
+/**
+ * Compiles a schema definition into a validator.
+ *
+ * Used internally by the router to validate query parameters and request bodies.
+ * Provides a Zod-compatible `safeParse` API for consistency.
+ *
+ * @param schema - The schema definition object
+ * @returns A compiled schema with `safeParse` method
+ *
+ * @example
+ * ```typescript
+ * const userSchema = compileSchema({
+ *   name: 'string',
+ *   age: 'number',
+ *   email: 'string?',
+ * });
+ *
+ * const result = userSchema.safeParse({ name: 'Alice', age: 30 });
+ * if (result.success) {
+ *   console.log(result.data.name); // 'Alice'
+ * } else {
+ *   console.log(result.error.flatten().fieldErrors);
+ * }
+ * ```
+ */
 export function compileSchema<T extends SchemaDefinition>(
   schema: T
 ): CompiledSchema<InferSchema<T>> {

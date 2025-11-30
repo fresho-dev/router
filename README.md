@@ -253,10 +253,11 @@ route({
   method: 'get',
   path: '/events',
   handler: async () => {
-    return sseResponse(async function* () {
-      yield { data: 'connected' };
-      yield { event: 'update', data: { count: 1 } };
-      yield { event: 'update', data: { count: 2 }, id: 'msg-2' };
+    return sseResponse(async (send, close) => {
+      send({ data: 'connected' });
+      send({ event: 'update', data: { count: 1 } });
+      send({ event: 'update', data: { count: 2 }, id: 'msg-2' });
+      close();
     });
   },
 });
@@ -271,9 +272,10 @@ route({
   method: 'get',
   path: '/logs',
   handler: async () => {
-    return streamJsonLines(async function* () {
-      yield { level: 'info', message: 'Starting...' };
-      yield { level: 'info', message: 'Done' };
+    return streamJsonLines(async (send, close) => {
+      send({ level: 'info', message: 'Starting...' });
+      send({ level: 'info', message: 'Done' });
+      close();
     });
   },
 });

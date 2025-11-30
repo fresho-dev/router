@@ -149,7 +149,34 @@ function stripBodyForHead(response: Response, isHead: boolean): Response {
   });
 }
 
-/** Creates a fetch handler from a router definition. */
+/**
+ * Creates a fetch handler from a router definition.
+ *
+ * This is called internally by `router().handler()`. You typically don't need
+ * to call this directly unless you're building custom integrations.
+ *
+ * The handler:
+ * - Matches incoming requests to routes by method and path
+ * - Extracts path parameters from the URL
+ * - Runs middleware in order
+ * - Validates query params and body against schemas
+ * - Calls the route handler and returns the response
+ *
+ * @param routerDef - The router definition to create a handler for
+ * @returns A fetch-compatible handler function
+ *
+ * @example
+ * ```typescript
+ * const api = router('/api', { ... });
+ *
+ * // Using router().handler() (preferred)
+ * export default { fetch: api.handler() };
+ *
+ * // Using createHandler directly (advanced)
+ * import { createHandler } from 'typed-routes';
+ * const handler = createHandler(api);
+ * ```
+ */
 export function createHandler<T extends RouterRoutes>(
   routerDef: Router<T>
 ): FetchHandler {
