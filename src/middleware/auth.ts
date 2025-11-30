@@ -109,8 +109,20 @@ export interface JwtPayload {
   [key: string]: unknown;
 }
 
+/** Supported HMAC algorithms for JWT signing/verification. */
+export type JwtAlgorithm = 'HS256' | 'HS384' | 'HS512';
+
+/** Maps JWT algorithm names to Web Crypto hash names. */
+const ALGORITHM_MAP: Record<JwtAlgorithm, string> = {
+  HS256: 'SHA-256',
+  HS384: 'SHA-384',
+  HS512: 'SHA-512',
+};
+
 /** Options for signing a JWT. */
 export interface SignJwtOptions {
+  /** Signing algorithm (default: 'HS256'). */
+  algorithm?: JwtAlgorithm;
   /** Expiration time (e.g., '1h', '7d', '30m', or seconds as number). */
   expiresIn?: string | number;
   /** Not before time (e.g., '5m', or seconds as number). */
@@ -138,7 +150,7 @@ export interface JwtAuthOptions<Ctx = {}> {
    */
   claims: (payload: JwtPayload) => Record<string, unknown> | null;
   /** Allowed algorithms (default: ['HS256']). */
-  algorithms?: string[];
+  algorithms?: JwtAlgorithm[];
   /** Function to extract token from request (default: Authorization header or 'token' cookie). */
   getToken?: (request: Request) => string | null;
 }
@@ -149,7 +161,7 @@ export interface JwtAuthOptions<Ctx = {}> {
 async function verifyJwt(
   token: string,
   secret: string | ArrayBuffer | CryptoKey,
-  algorithms: string[] = ['HS256']
+  algorithms: JwtAlgorithm[] = ['HS256']
 ): Promise<JwtPayload> {
   const parts = token.split('.');
   if (parts.length !== 3) {
@@ -158,16 +170,22 @@ async function verifyJwt(
 
   const [headerB64, payloadB64, signatureB64] = parts;
 
-  // Decode header
+  // Decode header.
   const header = JSON.parse(atob(headerB64.replace(/-/g, '+').replace(/_/g, '/')));
   if (!algorithms.includes(header.alg)) {
     throw new Error(`Unsupported algorithm: ${header.alg}`);
   }
 
-  // Decode payload
+  // Get the hash algorithm for the JWT algorithm.
+  const hashAlg = ALGORITHM_MAP[header.alg as JwtAlgorithm];
+  if (!hashAlg) {
+    throw new Error(`Unknown algorithm: ${header.alg}`);
+  }
+
+  // Decode payload.
   const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
 
-  // Verify signature using Web Crypto API
+  // Verify signature using Web Crypto API.
   const data = `${headerB64}.${payloadB64}`;
   const signature = Uint8Array.from(atob(signatureB64.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
 
@@ -179,7 +197,7 @@ async function verifyJwt(
     key = await crypto.subtle.importKey(
       'raw',
       keyData,
-      { name: 'HMAC', hash: 'SHA-256' },
+      { name: 'HMAC', hash: hashAlg },
       false,
       ['verify']
     );
@@ -196,12 +214,12 @@ async function verifyJwt(
     throw new Error('Invalid signature');
   }
 
-  // Check expiration
+  // Check expiration.
   if (payload.exp && payload.exp < Date.now() / 1000) {
     throw new Error('Token expired');
   }
 
-  // Check not before
+  // Check not before.
   if (payload.nbf && payload.nbf > Date.now() / 1000) {
     throw new Error('Token not yet valid');
   }
@@ -243,35 +261,29 @@ function base64urlEncode(data: string | Uint8Array): string {
 }
 
 /**
- * Signs a JWT token using Web Crypto API (HS256).
+ * Signs a JWT token using Web Crypto API.
  *
  * Uses only Web Crypto API, compatible with Cloudflare Workers, Deno, and browsers.
  *
  * @param payload - The JWT payload (custom claims)
  * @param secret - The signing secret (string, ArrayBuffer, or CryptoKey)
- * @param options - Optional signing options (expiresIn, issuer, etc.)
+ * @param options - Optional signing options (algorithm, expiresIn, issuer, etc.)
  * @returns The signed JWT token string
  *
  * @example
  * ```typescript
- * // Basic usage
+ * // Basic usage (HS256 by default)
  * const token = await jwtSign(
  *   { uid: 'user-123', role: 'admin' },
  *   'your-secret-key',
  *   { expiresIn: '1h' }
  * );
  *
- * // With all options
+ * // With HS512 algorithm
  * const token = await jwtSign(
  *   { uid: 'user-123' },
  *   process.env.JWT_SECRET,
- *   {
- *     expiresIn: '7d',
- *     notBefore: '5m',
- *     issuer: 'my-app',
- *     audience: 'my-api',
- *     subject: 'user-123',
- *   }
+ *   { algorithm: 'HS512', expiresIn: '7d' }
  * );
  * ```
  */
@@ -280,6 +292,9 @@ export async function jwtSign(
   secret: JwtSecret,
   options: SignJwtOptions = {}
 ): Promise<string> {
+  const algorithm = options.algorithm || 'HS256';
+  const hashAlg = ALGORITHM_MAP[algorithm];
+
   const now = options.issuedAt
     ? (options.issuedAt instanceof Date ? Math.floor(options.issuedAt.getTime() / 1000) : options.issuedAt)
     : Math.floor(Date.now() / 1000);
@@ -311,7 +326,7 @@ export async function jwtSign(
   }
 
   // Create header.
-  const header = { alg: 'HS256', typ: 'JWT' };
+  const header = { alg: algorithm, typ: 'JWT' };
 
   // Encode header and payload.
   const headerB64 = base64urlEncode(JSON.stringify(header));
@@ -327,7 +342,7 @@ export async function jwtSign(
     key = await crypto.subtle.importKey(
       'raw',
       keyData,
-      { name: 'HMAC', hash: 'SHA-256' },
+      { name: 'HMAC', hash: hashAlg },
       false,
       ['sign']
     );

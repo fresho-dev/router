@@ -709,5 +709,73 @@ describe('Authentication Middleware', () => {
         email: 'test@example.com',
       });
     });
+
+    it('should support HS384 algorithm', async () => {
+      const token = await jwtSign({ uid: 'user-123' }, secret, { algorithm: 'HS384' });
+
+      // Verify header has correct algorithm.
+      const headerB64 = token.split('.')[0];
+      const header = JSON.parse(atob(headerB64.replace(/-/g, '+').replace(/_/g, '/')));
+      assert.strictEqual(header.alg, 'HS384');
+
+      // Verify with jwtAuth using HS384.
+      const middleware = jwtAuth({
+        secret,
+        algorithms: ['HS384'],
+        claims: (payload) => ({ user: payload.uid }),
+      });
+
+      context.request = new Request('http://example.com/test', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      await middleware(context, next);
+      assert.strictEqual(nextCalled, true);
+      assert.strictEqual(context.user, 'user-123');
+    });
+
+    it('should support HS512 algorithm', async () => {
+      const token = await jwtSign({ uid: 'user-123' }, secret, { algorithm: 'HS512' });
+
+      // Verify header has correct algorithm.
+      const headerB64 = token.split('.')[0];
+      const header = JSON.parse(atob(headerB64.replace(/-/g, '+').replace(/_/g, '/')));
+      assert.strictEqual(header.alg, 'HS512');
+
+      // Verify with jwtAuth using HS512.
+      const middleware = jwtAuth({
+        secret,
+        algorithms: ['HS512'],
+        claims: (payload) => ({ user: payload.uid }),
+      });
+
+      context.request = new Request('http://example.com/test', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      await middleware(context, next);
+      assert.strictEqual(nextCalled, true);
+      assert.strictEqual(context.user, 'user-123');
+    });
+
+    it('should reject token with wrong algorithm', async () => {
+      // Sign with HS512.
+      const token = await jwtSign({ uid: 'user-123' }, secret, { algorithm: 'HS512' });
+
+      // Try to verify with HS256 only.
+      const middleware = jwtAuth({
+        secret,
+        algorithms: ['HS256'],
+        claims: (payload) => ({ user: payload.uid }),
+      });
+
+      context.request = new Request('http://example.com/test', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      const response = await middleware(context, next);
+      assert.strictEqual(response.status, 401);
+      assert.strictEqual(nextCalled, false);
+    });
   });
 });

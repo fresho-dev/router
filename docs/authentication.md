@@ -261,7 +261,7 @@ refresh: route.ctx<{ user: { id: string; email: string } }>()({
 
 ### jwtSign
 
-Signs a JWT token using Web Crypto API (HS256). Compatible with Cloudflare Workers, Deno, and browsers.
+Signs a JWT token using Web Crypto API. Compatible with Cloudflare Workers, Deno, and browsers.
 
 ```typescript
 import { jwtSign } from 'typed-routes/middleware';
@@ -270,6 +270,7 @@ const token = await jwtSign(
   { email: 'user@example.com', role: 'admin' },  // Custom claims
   'your-secret-key',                              // Secret
   {
+    algorithm: 'HS256',   // HS256, HS384, or HS512 (default: HS256)
     expiresIn: '7d',      // Token lifetime
     subject: 'user-123',  // sub claim (typically user ID)
     issuer: 'my-app',     // iss claim
@@ -282,6 +283,7 @@ const token = await jwtSign(
 
 | Option | Type | Description |
 |--------|------|-------------|
+| `algorithm` | `'HS256' \| 'HS384' \| 'HS512'` | Signing algorithm (default: `'HS256'`) |
 | `expiresIn` | `string \| number` | Token lifetime: `'1h'`, `'7d'`, `'30m'`, or seconds |
 | `notBefore` | `string \| number` | Token not valid until this time from now |
 | `subject` | `string` | `sub` claim (typically user ID) |
@@ -311,6 +313,9 @@ jwtAuth({
       email: payload.email,
     },
   }),
+
+  // Optional: allowed algorithms (default: ['HS256'])
+  algorithms: ['HS256', 'HS384', 'HS512'],
 
   // Optional: custom token extraction (default: Authorization header or 'token' cookie)
   getToken: (request) => {

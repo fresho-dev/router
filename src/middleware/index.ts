@@ -14,6 +14,7 @@ export { cors } from './cors.js';
 // Authentication middleware
 export type {
   BasicAuthOptions,
+  JwtAlgorithm,
   JwtAuthOptions,
   JwtPayload,
   SignJwtOptions,
