@@ -4,7 +4,7 @@
 
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { basicAuth, jwtAuth, jwtSign, bearerAuth } from './auth.js';
+import { basicAuth, jwtAuth, jwtSign, jwtVerify, bearerAuth } from './auth.js';
 import type { MiddlewareContext } from '../middleware.js';
 
 describe('Authentication Middleware', () => {
@@ -776,6 +776,89 @@ describe('Authentication Middleware', () => {
       const response = await middleware(context, next);
       assert.strictEqual(response.status, 401);
       assert.strictEqual(nextCalled, false);
+    });
+  });
+
+  describe('jwtVerify', () => {
+    const secret = 'test-secret-key';
+
+    it('should verify a valid token and return payload', async () => {
+      const token = await jwtSign({ uid: 'user-123', role: 'admin' }, secret, { expiresIn: '1h' });
+
+      const payload = await jwtVerify(token, secret);
+
+      assert.strictEqual(payload.uid, 'user-123');
+      assert.strictEqual(payload.role, 'admin');
+      assert.ok(payload.iat);
+      assert.ok(payload.exp);
+    });
+
+    it('should throw on invalid token format', async () => {
+      await assert.rejects(
+        () => jwtVerify('not.a.valid.token.format', secret),
+        /Invalid JWT format/
+      );
+    });
+
+    it('should throw on invalid signature', async () => {
+      const token = await jwtSign({ uid: 'user-123' }, secret);
+
+      await assert.rejects(
+        () => jwtVerify(token, 'wrong-secret'),
+        /Invalid signature/
+      );
+    });
+
+    it('should throw on expired token', async () => {
+      // Create token that expired 1 hour ago.
+      const token = await jwtSign({ uid: 'user-123' }, secret, {
+        issuedAt: Math.floor(Date.now() / 1000) - 7200,
+        expiresIn: '1h',
+      });
+
+      await assert.rejects(
+        () => jwtVerify(token, secret),
+        /Token expired/
+      );
+    });
+
+    it('should throw on token not yet valid', async () => {
+      const token = await jwtSign({ uid: 'user-123' }, secret, {
+        notBefore: '1h',
+        expiresIn: '2h',
+      });
+
+      await assert.rejects(
+        () => jwtVerify(token, secret),
+        /Token not yet valid/
+      );
+    });
+
+    it('should verify with specific algorithm', async () => {
+      const token = await jwtSign({ uid: 'user-123' }, secret, { algorithm: 'HS384' });
+
+      const payload = await jwtVerify(token, secret, { algorithms: ['HS384'] });
+
+      assert.strictEqual(payload.uid, 'user-123');
+    });
+
+    it('should reject when algorithm not in allowed list', async () => {
+      const token = await jwtSign({ uid: 'user-123' }, secret, { algorithm: 'HS512' });
+
+      await assert.rejects(
+        () => jwtVerify(token, secret, { algorithms: ['HS256'] }),
+        /Unsupported algorithm/
+      );
+    });
+
+    it('should work with ArrayBuffer secret', async () => {
+      const encoder = new TextEncoder();
+      const secretBuffer = encoder.encode('buffer-secret').buffer;
+
+      const token = await jwtSign({ uid: 'user-123' }, secretBuffer);
+      const payload = await jwtVerify(token, secretBuffer);
+
+      assert.strictEqual(payload.uid, 'user-123');
     });
   });
 });

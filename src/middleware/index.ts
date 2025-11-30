@@ -18,9 +18,10 @@ export type {
   JwtAuthOptions,
   JwtPayload,
   SignJwtOptions,
+  VerifyJwtOptions,
   BearerAuthOptions,
 } from './auth.js';
-export { basicAuth, jwtAuth, jwtSign, bearerAuth } from './auth.js';
+export { basicAuth, jwtAuth, jwtSign, jwtVerify, bearerAuth } from './auth.js';
 
 // Common middleware utilities
 export type {

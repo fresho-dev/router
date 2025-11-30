@@ -140,6 +140,12 @@ export interface SignJwtOptions {
 /** JWT secret value. */
 type JwtSecret = string | ArrayBuffer | CryptoKey;
 
+/** Options for verifying a JWT. */
+export interface VerifyJwtOptions {
+  /** Allowed algorithms (default: ['HS256']). */
+  algorithms?: JwtAlgorithm[];
+}
+
 /** JWT authentication middleware configuration. */
 export interface JwtAuthOptions<Ctx = {}> {
   /** Secret key or function to get the secret from context. */
@@ -157,12 +163,37 @@ export interface JwtAuthOptions<Ctx = {}> {
 
 /**
  * Verifies a JWT token using Web Crypto API.
+ *
+ * Uses only Web Crypto API, compatible with Cloudflare Workers, Deno, and browsers.
+ *
+ * @param token - The JWT token string to verify
+ * @param secret - The secret used to sign the token (string, ArrayBuffer, or CryptoKey)
+ * @param options - Optional verification options
+ * @returns The decoded JWT payload
+ * @throws Error if the token is invalid, expired, or not yet valid
+ *
+ * @example
+ * ```typescript
+ * import { jwtVerify } from 'typed-routes/middleware';
+ *
+ * try {
+ *   const payload = await jwtVerify(token, 'your-secret-key');
+ *   console.log(payload.sub); // user ID
+ * } catch (error) {
+ *   console.error('Invalid token:', error.message);
+ * }
+ *
+ * // With specific algorithms
+ * const payload = await jwtVerify(token, secret, { algorithms: ['HS512'] });
+ * ```
  */
-async function verifyJwt(
+export async function jwtVerify(
   token: string,
   secret: string | ArrayBuffer | CryptoKey,
-  algorithms: JwtAlgorithm[] = ['HS256']
+  options: VerifyJwtOptions = {}
 ): Promise<JwtPayload> {
+  const algorithms = options.algorithms || ['HS256'];
+
   const parts = token.split('.');
   if (parts.length !== 3) {
     throw new Error('Invalid JWT format');
@@ -418,7 +449,7 @@ export function jwtAuth<Ctx = {}>(options: JwtAuthOptions<Ctx>): Middleware<Ctx>
         ? options.secret(context)
         : options.secret;
 
-      const payload = await verifyJwt(token, secret, options.algorithms);
+      const payload = await jwtVerify(token, secret, { algorithms: options.algorithms });
 
       // Map payload to context properties
       const claims = options.claims(payload);

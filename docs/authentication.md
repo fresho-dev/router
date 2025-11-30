@@ -293,6 +293,38 @@ const token = await jwtSign(
 
 **Duration formats:** `'60s'`, `'30m'`, `'1h'`, `'7d'`, `'2w'`
 
+### jwtVerify
+
+Verifies a JWT token and returns the payload. Use this when you need to verify tokens outside of the middleware context.
+
+```typescript
+import { jwtVerify } from 'typed-routes/middleware';
+
+try {
+  const payload = await jwtVerify(token, 'your-secret-key');
+  console.log(payload.sub); // user ID
+  console.log(payload.exp); // expiration timestamp
+} catch (error) {
+  console.error('Invalid token:', error.message);
+}
+
+// With specific algorithms
+const payload = await jwtVerify(token, secret, { algorithms: ['HS512'] });
+```
+
+**Options:**
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `algorithms` | `JwtAlgorithm[]` | Allowed algorithms (default: `['HS256']`) |
+
+**Throws:**
+- `'Invalid JWT format'` - Token doesn't have 3 parts
+- `'Unsupported algorithm'` - Token uses algorithm not in allowed list
+- `'Invalid signature'` - Signature verification failed
+- `'Token expired'` - Token's `exp` claim is in the past
+- `'Token not yet valid'` - Token's `nbf` claim is in the future
+
 ### jwtAuth
 
 Middleware that verifies JWT tokens from the Authorization header or cookies.
