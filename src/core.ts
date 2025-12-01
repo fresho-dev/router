@@ -184,14 +184,15 @@ export function router<T extends RouterRoutes, M extends Middleware<any>[]>(
   routes: T,
   ...middleware: M
 ): Router<T> {
-  const self: Router<T> = {
+  // Cast needed because RouterBrand uses a type-only symbol declaration.
+  const self = {
     routes,
     middleware: middleware.length > 0 ? middleware : undefined,
     handler() {
       return createHandler(self);
     },
-  };
-  // Add marker for type checking.
+  } as Router<T>;
+  // Add marker for runtime type checking.
   (self as unknown as Record<symbol, boolean>)[ROUTER_MARKER] = true;
   return self;
 }
