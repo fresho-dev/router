@@ -2,25 +2,53 @@
  * @fileoverview OpenAPI documentation generation.
  *
  * Generates OpenAPI 3.0 documentation from router definitions.
+ *
+ * **Path Convention:**
+ * - Property names = URL path segments
+ * - `$param` prefix = dynamic segment (`{param}` in OpenAPI)
+ * - `get`, `post`, `put`, `patch`, `delete` = HTTP method handlers
  */
 
 import type { SchemaDefinition } from './schema.js';
 import type { Router, RouterRoutes, RouteDefinition } from './types.js';
-import { isRouter, isRoute } from './types.js';
+import { isRouter, isRoute, isFunction, HTTP_METHODS } from './types.js';
+
+/** Collected route info for documentation. */
+interface CollectedRoute {
+  path: string;
+  method: string;
+  route: RouteDefinition | null;
+}
+
+/** Converts property name to path segment, handling $param convention. */
+function propertyToSegment(prop: string): string {
+  if (prop.startsWith('$')) {
+    return '{' + prop.slice(1) + '}';
+  }
+  return prop;
+}
 
 /** Collects all routes from a router tree. */
 function collectRoutes(
   routerDef: Router<RouterRoutes>,
   parentPath = ''
-): Array<{ path: string; route: RouteDefinition }> {
-  const fullBasePath = parentPath + routerDef.basePath;
-  const collectedRoutes: Array<{ path: string; route: RouteDefinition }> = [];
+): CollectedRoute[] {
+  const collectedRoutes: CollectedRoute[] = [];
 
-  for (const [, entry] of Object.entries(routerDef.routes)) {
-    if (isRouter(entry)) {
-      collectedRoutes.push(...collectRoutes(entry, fullBasePath));
-    } else if (isRoute(entry)) {
-      collectedRoutes.push({ path: fullBasePath + entry.path, route: entry });
+  for (const [prop, entry] of Object.entries(routerDef.routes)) {
+    // Check if this is a method handler.
+    if (HTTP_METHODS.has(prop)) {
+      const path = parentPath || '/';
+      if (isFunction(entry)) {
+        collectedRoutes.push({ path, method: prop, route: null });
+      } else if (isRoute(entry)) {
+        collectedRoutes.push({ path, method: prop, route: entry });
+      }
+    } else if (isRouter(entry)) {
+      // Nested router - recurse with updated path.
+      const segment = propertyToSegment(prop);
+      const newPath = parentPath ? `${parentPath}/${segment}` : `/${segment}`;
+      collectedRoutes.push(...collectRoutes(entry, newPath));
     }
   }
 
@@ -37,15 +65,13 @@ export function generateDocs(config: {
   const paths: Record<string, Record<string, object>> = {};
   const allRoutes = collectRoutes(config.router);
 
-  for (const { path, route } of allRoutes) {
-    const pathKey = path.replace(/:(\w+)/g, '{$1}');
-
-    if (!paths[pathKey]) {
-      paths[pathKey] = {};
+  for (const { path, method, route } of allRoutes) {
+    if (!paths[path]) {
+      paths[path] = {};
     }
 
     const operation: Record<string, unknown> = {
-      description: route.description,
+      description: route?.description,
       responses: {
         200: { description: 'Successful response' },
         400: { description: 'Validation error' },
@@ -53,7 +79,7 @@ export function generateDocs(config: {
     };
 
     // Add query parameters (only primitive types supported in query strings).
-    if (route.query) {
+    if (route?.query) {
       const querySchema = route.query as SchemaDefinition;
       operation.parameters = Object.entries(querySchema)
         .filter(([, type]) => typeof type === 'string')
@@ -66,7 +92,7 @@ export function generateDocs(config: {
     }
 
     // Add request body.
-    if (route.body && ['post', 'put', 'patch'].includes(route.method)) {
+    if (route?.body && ['post', 'put', 'patch'].includes(method)) {
       const bodySchema = route.body as SchemaDefinition;
       operation.requestBody = {
         required: true,
@@ -92,7 +118,7 @@ export function generateDocs(config: {
       };
     }
 
-    paths[pathKey][route.method] = operation;
+    paths[path][method] = operation;
   }
 
   return {

@@ -6,11 +6,9 @@ import type { MiddlewareContext, MiddlewareNext } from './middleware.js';
 
 describe('router.handler()', () => {
   it('returns a fetch handler equivalent to createHandler', async () => {
-    const api = router('', {
-      hello: route({
-        method: 'get',
-        path: '/hello',
-        handler: async () => ({ message: 'world' }),
+    const api = router({
+      hello: router({
+        get: async () => ({ message: 'world' }),
       }),
     });
 
@@ -22,12 +20,12 @@ describe('router.handler()', () => {
   });
 
   it('works with nested routers', async () => {
-    const api = router('/api', {
-      v1: router('/v1', {
-        users: route({
-          method: 'get',
-          path: '/users',
-          handler: async () => ({ users: [] }),
+    const api = router({
+      api: router({
+        v1: router({
+          users: router({
+            get: async () => ({ users: [] }),
+          }),
         }),
       }),
     });
@@ -46,11 +44,9 @@ describe('router.handler()', () => {
       return response;
     };
 
-    const api = router('', {
-      test: route({
-        method: 'get',
-        path: '/test',
-        handler: async () => ({ ok: true }),
+    const api = router({
+      test: router({
+        get: async () => ({ ok: true }),
       }),
     }, addHeader);
 
@@ -62,11 +58,9 @@ describe('router.handler()', () => {
   });
 
   it('passes env and ctx to handlers', async () => {
-    const api = router('', {
-      test: route({
-        method: 'get',
-        path: '/test',
-        handler: async (c) => ({
+    const api = router({
+      test: router({
+        get: async (c) => ({
           hasEnv: c.env !== undefined,
           envValue: (c.env as { KEY: string }).KEY,
         }),
@@ -88,18 +82,16 @@ describe('router.handler()', () => {
 describe('standalone router', () => {
   describe('createHandler()', () => {
     it('returns 404 for unmatched routes', async () => {
-      const handler = createHandler(router('', {}));
+      const handler = createHandler(router({}));
       const res = await handler(new Request('http://localhost/unknown'));
       assert.strictEqual(res.status, 404);
     });
 
     it('matches GET routes', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'get',
-            path: '/test',
-            handler: async () => Response.json({ ok: true }),
+        router({
+          test: router({
+            get: async () => Response.json({ ok: true }),
           }),
         })
       );
@@ -111,11 +103,9 @@ describe('standalone router', () => {
 
     it('matches POST routes', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'post',
-            path: '/test',
-            handler: async () => Response.json({ method: 'post' }),
+        router({
+          test: router({
+            post: async () => Response.json({ method: 'post' }),
           }),
         })
       );
@@ -127,11 +117,9 @@ describe('standalone router', () => {
 
     it('matches PUT routes', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'put',
-            path: '/test',
-            handler: async () => Response.json({ method: 'put' }),
+        router({
+          test: router({
+            put: async () => Response.json({ method: 'put' }),
           }),
         })
       );
@@ -142,11 +130,9 @@ describe('standalone router', () => {
 
     it('matches PATCH routes', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'patch',
-            path: '/test',
-            handler: async () => Response.json({ method: 'patch' }),
+        router({
+          test: router({
+            patch: async () => Response.json({ method: 'patch' }),
           }),
         })
       );
@@ -157,11 +143,9 @@ describe('standalone router', () => {
 
     it('matches DELETE routes', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'delete',
-            path: '/test',
-            handler: async () => Response.json({ method: 'delete' }),
+        router({
+          test: router({
+            delete: async () => Response.json({ method: 'delete' }),
           }),
         })
       );
@@ -172,11 +156,9 @@ describe('standalone router', () => {
 
     it('matches OPTIONS routes', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'options',
-            path: '/test',
-            handler: async () => Response.json({ method: 'options' }),
+        router({
+          test: router({
+            options: async () => Response.json({ method: 'options' }),
           }),
         })
       );
@@ -187,69 +169,53 @@ describe('standalone router', () => {
 
     it('matches HEAD requests to GET routes per RFC 9110', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'get',
-            path: '/test',
-            handler: async () => Response.json({ data: 'hello' }),
+        router({
+          test: router({
+            get: async () => Response.json({ data: 'hello' }),
           }),
         })
       );
 
-      // HEAD should match GET route and return 200.
       const res = await handler(new Request('http://localhost/test', { method: 'HEAD' }));
       assert.strictEqual(res.status, 200);
-
-      // Body must be empty for HEAD requests per RFC 9110.
       const body = await res.text();
       assert.strictEqual(body, '');
     });
 
     it('returns 404 for HEAD when no GET route exists', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'post',
-            path: '/test',
-            handler: async () => Response.json({ ok: true }),
+        router({
+          test: router({
+            post: async () => Response.json({ ok: true }),
           }),
         })
       );
 
-      // HEAD only matches GET routes, not POST.
       const res = await handler(new Request('http://localhost/test', { method: 'HEAD' }));
       assert.strictEqual(res.status, 404);
     });
 
     it('prefers explicit HEAD route over GET fallback', async () => {
       const handler = createHandler(
-        router('', {
-          // HEAD defined first - will match before GET fallback.
-          testHead: route({
-            method: 'head',
-            path: '/test',
-            handler: async () => new Response(null, { status: 204 }),
-          }),
-          testGet: route({
-            method: 'get',
-            path: '/test',
-            handler: async () => Response.json({ data: 'from get' }),
+        router({
+          test: router({
+            head: async () => new Response(null, { status: 204 }),
+            get: async () => Response.json({ data: 'from get' }),
           }),
         })
       );
 
-      // Explicit HEAD route takes precedence (first match wins).
       const res = await handler(new Request('http://localhost/test', { method: 'HEAD' }));
       assert.strictEqual(res.status, 204);
     });
 
-    it('uses router base path', async () => {
+    it('uses property names as path segments', async () => {
       const handler = createHandler(
-        router('/api', {
-          test: route({
-            method: 'get',
-            path: '/test',
-            handler: async () => Response.json({ ok: true }),
+        router({
+          api: router({
+            test: router({
+              get: async () => Response.json({ ok: true }),
+            }),
           }),
         })
       );
@@ -262,15 +228,13 @@ describe('standalone router', () => {
     });
 
     it('combines nested router paths', async () => {
-      const inner = router('/inner', {
-        test: route({
-          method: 'get',
-          path: '/test',
-          handler: async () => Response.json({ nested: true }),
+      const inner = router({
+        test: router({
+          get: async () => Response.json({ nested: true }),
         }),
       });
 
-      const handler = createHandler(router('/outer', { inner }));
+      const handler = createHandler(router({ outer: router({ inner }) }));
 
       const res = await handler(new Request('http://localhost/outer/inner/test'));
       assert.strictEqual(res.status, 200);
@@ -278,13 +242,15 @@ describe('standalone router', () => {
     });
 
     it('handles deeply nested routers (3+ levels)', async () => {
-      const l3 = router('/l3', {
-        r: route({ method: 'get', path: '/r', handler: async () => Response.json({ level: 3 }) }),
+      const l3 = router({
+        r: router({
+          get: async () => Response.json({ level: 3 }),
+        }),
       });
-      const l2 = router('/l2', { l3 });
-      const l1 = router('/l1', { l2 });
+      const l2 = router({ l3 });
+      const l1 = router({ l2 });
 
-      const handler = createHandler(l1);
+      const handler = createHandler(router({ l1 }));
 
       const res = await handler(new Request('http://localhost/l1/l2/l3/r'));
       assert.strictEqual(res.status, 200);
@@ -293,12 +259,10 @@ describe('standalone router', () => {
 
     it('multiple routes on same path with different methods', async () => {
       const handler = createHandler(
-        router('', {
-          getUsers: route({ method: 'get', path: '/users', handler: async () => Response.json({ action: 'list' }) }),
-          createUser: route({
-            method: 'post',
-            path: '/users',
-            handler: async () => Response.json({ action: 'create' }),
+        router({
+          users: router({
+            get: async () => Response.json({ action: 'list' }),
+            post: async () => Response.json({ action: 'create' }),
           }),
         })
       );
@@ -314,12 +278,12 @@ describe('standalone router', () => {
   describe('query validation', () => {
     it('passes valid required string', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'get',
-            path: '/test',
-            query: { name: 'string' },
-            handler: async (c) => Response.json({ name: c.query.name }),
+        router({
+          test: router({
+            get: route({
+              query: { name: 'string' },
+              handler: async (c) => Response.json({ name: c.query.name }),
+            }),
           }),
         })
       );
@@ -331,12 +295,12 @@ describe('standalone router', () => {
 
     it('passes valid required number (coerces from string)', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'get',
-            path: '/test',
-            query: { count: 'number' },
-            handler: async (c) => Response.json({ count: c.query.count }),
+        router({
+          test: router({
+            get: route({
+              query: { count: 'number' },
+              handler: async (c) => Response.json({ count: c.query.count }),
+            }),
           }),
         })
       );
@@ -348,12 +312,12 @@ describe('standalone router', () => {
 
     it('passes valid required boolean (coerces from string)', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'get',
-            path: '/test',
-            query: { active: 'boolean' },
-            handler: async (c) => Response.json({ active: c.query.active }),
+        router({
+          test: router({
+            get: route({
+              query: { active: 'boolean' },
+              handler: async (c) => Response.json({ active: c.query.active }),
+            }),
           }),
         })
       );
@@ -365,12 +329,12 @@ describe('standalone router', () => {
 
     it('passes optional params when present', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'get',
-            path: '/test',
-            query: { name: 'string?' },
-            handler: async (c) => Response.json({ name: c.query.name }),
+        router({
+          test: router({
+            get: route({
+              query: { name: 'string?' },
+              handler: async (c) => Response.json({ name: c.query.name }),
+            }),
           }),
         })
       );
@@ -382,12 +346,12 @@ describe('standalone router', () => {
 
     it('passes when optional params are missing', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'get',
-            path: '/test',
-            query: { name: 'string?' },
-            handler: async (c) => Response.json({ query: c.query }),
+        router({
+          test: router({
+            get: route({
+              query: { name: 'string?' },
+              handler: async (c) => Response.json({ query: c.query }),
+            }),
           }),
         })
       );
@@ -399,12 +363,12 @@ describe('standalone router', () => {
 
     it('fails when required param is missing', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'get',
-            path: '/test',
-            query: { name: 'string' },
-            handler: async () => Response.json({}),
+        router({
+          test: router({
+            get: route({
+              query: { name: 'string' },
+              handler: async () => Response.json({}),
+            }),
           }),
         })
       );
@@ -417,12 +381,12 @@ describe('standalone router', () => {
 
     it('fails when number param is not numeric', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'get',
-            path: '/test',
-            query: { count: 'number' },
-            handler: async () => Response.json({}),
+        router({
+          test: router({
+            get: route({
+              query: { count: 'number' },
+              handler: async () => Response.json({}),
+            }),
           }),
         })
       );
@@ -435,12 +399,12 @@ describe('standalone router', () => {
   describe('body validation', () => {
     it('passes valid body for POST', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'post',
-            path: '/test',
-            body: { name: 'string' },
-            handler: async (c) => Response.json({ name: c.body.name }),
+        router({
+          test: router({
+            post: route({
+              body: { name: 'string' },
+              handler: async (c) => Response.json({ name: c.body.name }),
+            }),
           }),
         })
       );
@@ -458,12 +422,12 @@ describe('standalone router', () => {
 
     it('passes valid body for PUT', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'put',
-            path: '/test',
-            body: { name: 'string' },
-            handler: async () => Response.json({ ok: true }),
+        router({
+          test: router({
+            put: route({
+              body: { name: 'string' },
+              handler: async () => Response.json({ ok: true }),
+            }),
           }),
         })
       );
@@ -480,12 +444,12 @@ describe('standalone router', () => {
 
     it('passes valid body for PATCH', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'patch',
-            path: '/test',
-            body: { name: 'string?' },
-            handler: async () => Response.json({ ok: true }),
+        router({
+          test: router({
+            patch: route({
+              body: { name: 'string?' },
+              handler: async () => Response.json({ ok: true }),
+            }),
           }),
         })
       );
@@ -502,12 +466,12 @@ describe('standalone router', () => {
 
     it('fails when required body field is missing', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'post',
-            path: '/test',
-            body: { name: 'string', email: 'string' },
-            handler: async () => Response.json({}),
+        router({
+          test: router({
+            post: route({
+              body: { name: 'string', email: 'string' },
+              handler: async () => Response.json({}),
+            }),
           }),
         })
       );
@@ -516,7 +480,7 @@ describe('standalone router', () => {
         new Request('http://localhost/test', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: 'alice' }), // missing email
+          body: JSON.stringify({ name: 'alice' }),
         })
       );
       assert.strictEqual(res.status, 400);
@@ -524,12 +488,12 @@ describe('standalone router', () => {
 
     it('returns error with details', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'post',
-            path: '/test',
-            body: { count: 'number' },
-            handler: async () => Response.json({}),
+        router({
+          test: router({
+            post: route({
+              body: { count: 'number' },
+              handler: async () => Response.json({}),
+            }),
           }),
         })
       );
@@ -551,11 +515,9 @@ describe('standalone router', () => {
   describe('edge cases', () => {
     it('route with no query or body schema', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'get',
-            path: '/test',
-            handler: async () => Response.json({ ok: true }),
+        router({
+          test: router({
+            get: async () => Response.json({ ok: true }),
           }),
         })
       );
@@ -566,12 +528,12 @@ describe('standalone router', () => {
 
     it('route with empty query schema', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'get',
-            path: '/test',
-            query: {},
-            handler: async (c) => Response.json({ query: c.query }),
+        router({
+          test: router({
+            get: route({
+              query: {},
+              handler: async (c) => Response.json({ query: c.query }),
+            }),
           }),
         })
       );
@@ -583,12 +545,12 @@ describe('standalone router', () => {
 
     it('special characters in query values', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'get',
-            path: '/test',
-            query: { q: 'string' },
-            handler: async (c) => Response.json({ q: c.query.q }),
+        router({
+          test: router({
+            get: route({
+              query: { q: 'string' },
+              handler: async (c) => Response.json({ q: c.query.q }),
+            }),
           }),
         })
       );
@@ -602,12 +564,12 @@ describe('standalone router', () => {
 
     it('unicode in query params', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'get',
-            path: '/test',
-            query: { name: 'string' },
-            handler: async (c) => Response.json({ name: c.query.name }),
+        router({
+          test: router({
+            get: route({
+              query: { name: 'string' },
+              handler: async (c) => Response.json({ name: c.query.name }),
+            }),
           }),
         })
       );
@@ -621,28 +583,25 @@ describe('standalone router', () => {
 
     it('route without handler still validates', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'get',
-            path: '/test',
-            query: { required: 'string' },
-            // no handler
+        router({
+          test: router({
+            get: route({
+              query: { required: 'string' },
+              handler: async () => ({}),
+            }),
           }),
         })
       );
 
-      // Missing required param should still fail validation.
       const res = await handler(new Request('http://localhost/test'));
       assert.strictEqual(res.status, 400);
     });
 
     it('route without handler returns empty JSON on success', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'get',
-            path: '/test',
-            // no handler
+        router({
+          test: router({
+            get: async () => ({}),
           }),
         })
       );
@@ -655,30 +614,28 @@ describe('standalone router', () => {
     it('does not call handler when validation fails', async () => {
       let handlerCalled = false;
       const handler = createHandler(
-        router('', {
-          r: route({
-            method: 'get',
-            path: '/r',
-            query: { required: 'string' },
-            handler: async () => {
-              handlerCalled = true;
-              return Response.json({});
-            },
+        router({
+          r: router({
+            get: route({
+              query: { required: 'string' },
+              handler: async () => {
+                handlerCalled = true;
+                return Response.json({});
+              },
+            }),
           }),
         })
       );
 
-      await handler(new Request('http://localhost/r')); // missing required param
+      await handler(new Request('http://localhost/r'));
       assert.strictEqual(handlerCalled, false);
     });
 
     it('passes env and ctx to handler via context', async () => {
       const handler = createHandler(
-        router('', {
-          test: route({
-            method: 'get',
-            path: '/test',
-            handler: async (c) =>
+        router({
+          test: router({
+            get: async (c) =>
               Response.json({
                 hasEnv: c.env !== undefined,
                 hasCtx: c.executionCtx !== undefined,
@@ -699,11 +656,11 @@ describe('standalone router', () => {
   describe('path parameters', () => {
     it('extracts single path parameter', async () => {
       const handler = createHandler(
-        router('', {
-          getBook: route({
-            method: 'get',
-            path: '/books/:id',
-            handler: async (c) => Response.json({ bookId: c.path.id }),
+        router({
+          books: router({
+            $id: router({
+              get: async (c) => Response.json({ bookId: c.path.id }),
+            }),
           }),
         })
       );
@@ -715,12 +672,16 @@ describe('standalone router', () => {
 
     it('extracts multiple path parameters', async () => {
       const handler = createHandler(
-        router('', {
-          getChapter: route({
-            method: 'get',
-            path: '/books/:bookId/chapters/:chapterId',
-            handler: async (c) =>
-              Response.json({ bookId: c.path.bookId, chapterId: c.path.chapterId }),
+        router({
+          books: router({
+            $bookId: router({
+              chapters: router({
+                $chapterId: router({
+                  get: async (c) =>
+                    Response.json({ bookId: c.path.bookId, chapterId: c.path.chapterId }),
+                }),
+              }),
+            }),
           }),
         })
       );
@@ -731,14 +692,20 @@ describe('standalone router', () => {
     });
 
     it('path params work alongside query params', async () => {
+      interface BookContext {
+        path: { id: string };
+      }
+
       const handler = createHandler(
-        router('', {
-          getBook: route({
-            method: 'get',
-            path: '/books/:id',
-            query: { format: 'string?' },
-            handler: async (c) =>
-              Response.json({ bookId: c.path.id, format: c.query.format ?? 'json' }),
+        router({
+          books: router({
+            $id: router({
+              get: route.ctx<BookContext>()({
+                query: { format: 'string?' },
+                handler: async (c) =>
+                  Response.json({ bookId: c.path.id, format: c.query.format ?? 'json' }),
+              }),
+            }),
           }),
         })
       );
@@ -748,79 +715,24 @@ describe('standalone router', () => {
       assert.deepStrictEqual(await res.json(), { bookId: '123', format: 'xml' });
     });
 
-    it('extracts path param with file extension suffix', async () => {
+    it('encodes path params in URL', async () => {
       const handler = createHandler(
-        router('', {
-          getFile: route({
-            method: 'get',
-            path: '/files/:name.pdf',
-            handler: async (c) => Response.json({ name: c.path.name }),
+        router({
+          users: router({
+            $id: router({
+              get: async (c) => Response.json({ userId: c.path.id }),
+            }),
           }),
         })
       );
 
-      const res = await handler(new Request('http://localhost/files/document.pdf'));
+      const res = await handler(new Request('http://localhost/users/' + encodeURIComponent('user@example.com')));
       assert.strictEqual(res.status, 200);
-      assert.deepStrictEqual(await res.json(), { name: 'document' });
-    });
-
-    it('does not match wrong extension', async () => {
-      const handler = createHandler(
-        router('', {
-          getFile: route({
-            method: 'get',
-            path: '/files/:name.pdf',
-            handler: async () => Response.json({ ok: true }),
-          }),
-        })
-      );
-
-      const res = await handler(new Request('http://localhost/files/document.txt'));
-      assert.strictEqual(res.status, 404);
-    });
-
-    it('handles multiple params with extensions', async () => {
-      const handler = createHandler(
-        router('', {
-          getAudio: route({
-            method: 'get',
-            path: '/audio/:artist-:track.mp3',
-            handler: async (c) =>
-              Response.json({ artist: c.path.artist, track: c.path.track }),
-          }),
-        })
-      );
-
-      const res = await handler(new Request('http://localhost/audio/beatles-yesterday.mp3'));
-      assert.strictEqual(res.status, 200);
-      assert.deepStrictEqual(await res.json(), { artist: 'beatles', track: 'yesterday' });
-    });
-
-    it('escapes special regex characters in path literals', async () => {
-      const handler = createHandler(
-        router('', {
-          getFile: route({
-            method: 'get',
-            path: '/files/:name.tar.gz',
-            handler: async (c) => Response.json({ name: c.path.name }),
-          }),
-        })
-      );
-
-      // Should match literal .tar.gz
-      const res = await handler(new Request('http://localhost/files/archive.tar.gz'));
-      assert.strictEqual(res.status, 200);
-      assert.deepStrictEqual(await res.json(), { name: 'archive' });
-
-      // Should NOT match .tarXgz (unescaped . would match any char)
-      const res2 = await handler(new Request('http://localhost/files/archiveXtarXgz'));
-      assert.strictEqual(res2.status, 404);
+      assert.deepStrictEqual(await res.json(), { userId: 'user@example.com' });
     });
   });
 
-
   describe('middleware to handler context passing', () => {
-    // Define context types for type-safe middleware-to-handler communication.
     interface UserContext {
       user: { id: string; name: string };
     }
@@ -842,16 +754,13 @@ describe('standalone router', () => {
 
       const handler = createHandler(
         router(
-          '',
           {
-            // Use route.ctx<T>() for clean context typing.
-            profile: route.ctx<UserContext>()({
-              method: 'get',
-              path: '/profile',
-              handler: async (c) => {
-                // c.user is fully typed - no casting needed.
-                return Response.json({ userId: c.user.id, userName: c.user.name });
-              },
+            profile: router({
+              get: route.ctx<UserContext>()({
+                handler: async (c) => {
+                  return Response.json({ userId: c.user.id, userName: c.user.name });
+                },
+              }),
             }),
           },
           authMiddleware
@@ -876,19 +785,17 @@ describe('standalone router', () => {
 
       const handler = createHandler(
         router(
-          '',
           {
-            data: route.ctx<PermissionsContext>()({
-              method: 'get',
-              path: '/data',
-              handler: async (c) => {
-                // Both user and permissions are typed.
-                return Response.json({
-                  userId: c.user.id,
-                  canRead: c.permissions.includes('read'),
-                  canWrite: c.permissions.includes('write'),
-                });
-              },
+            data: router({
+              get: route.ctx<PermissionsContext>()({
+                handler: async (c) => {
+                  return Response.json({
+                    userId: c.user.id,
+                    canRead: c.permissions.includes('read'),
+                    canWrite: c.permissions.includes('write'),
+                  });
+                },
+              }),
             }),
           },
           authMiddleware, permissionsMiddleware
@@ -912,19 +819,17 @@ describe('standalone router', () => {
 
       const handler = createHandler(
         router(
-          '',
           {
-            status: route.ctx<DbContext>()({
-              method: 'get',
-              path: '/status',
-              handler: async (c) => {
-                // dbConnection is typed, env still needs casting (it's always unknown).
-                const env = c.env as { API_KEY: string };
-                return Response.json({
-                  apiKey: env.API_KEY,
-                  dbStatus: c.dbConnection,
-                });
-              },
+            status: router({
+              get: route.ctx<DbContext>()({
+                handler: async (c) => {
+                  const env = c.env as { API_KEY: string };
+                  return Response.json({
+                    apiKey: env.API_KEY,
+                    dbStatus: c.dbConnection,
+                  });
+                },
+              }),
             }),
           },
           dbMiddleware
@@ -940,7 +845,6 @@ describe('standalone router', () => {
     });
 
     it('supports chained context types with route.ctx<A>().ctx<B>()', async () => {
-      // Define separate context types.
       interface EnvContext {
         env: { API_KEY: string };
       }
@@ -953,7 +857,6 @@ describe('standalone router', () => {
         dbConnection: string;
       }
 
-      // Middleware that adds context properties.
       const authMiddleware = async (ctx: MiddlewareContext, next: MiddlewareNext) => {
         ctx.user = { id: 'user-123', role: 'admin' };
         return next();
@@ -966,21 +869,18 @@ describe('standalone router', () => {
 
       const handler = createHandler(
         router(
-          '',
           {
-            // Chain multiple context types.
-            data: route.ctx<EnvContext>().ctx<AuthContext>().ctx<DbContext>()({
-              method: 'get',
-              path: '/data',
-              handler: async (c) => {
-                // All three context types are merged and typed.
-                return Response.json({
-                  apiKey: c.env.API_KEY,
-                  userId: c.user.id,
-                  userRole: c.user.role,
-                  dbStatus: c.dbConnection,
-                });
-              },
+            data: router({
+              get: route.ctx<EnvContext>().ctx<AuthContext>().ctx<DbContext>()({
+                handler: async (c) => {
+                  return Response.json({
+                    apiKey: c.env.API_KEY,
+                    userId: c.user.id,
+                    userRole: c.user.role,
+                    dbStatus: c.dbConnection,
+                  });
+                },
+              }),
             }),
           },
           authMiddleware, dbMiddleware

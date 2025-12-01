@@ -2,14 +2,7 @@
  * @fileoverview Local client for typed-routes.
  *
  * Provides a typed client that invokes route handlers directly without HTTP.
- * Ideal for testing, server-side rendering, or anywhere you need to call
- * routes programmatically within the same process.
- *
- * Unlike the HTTP client, the local client:
- * - Calls handlers directly (no network overhead)
- * - Validates query/body schemas before calling handlers
- * - Provides immediate error feedback for schema violations
- * - Supports custom env and execution context per call
+ * Uses the same API as createHttpClient for consistency.
  *
  * @example
  * ```typescript
@@ -18,223 +11,315 @@
  *
  * const client = createLocalClient(api);
  *
- * // Configure default env/ctx for all calls
- * client.configure({ env: { DB: database } });
- *
- * // Call routes directly (no HTTP)
- * const users = await client.users.list();
- * const user = await client.users.get({ path: { id: '123' } });
- *
- * // Override env/ctx for a specific call
- * const result = await client.data.process({
- *   body: { items: [...] },
- *   env: { DB: testDatabase },
- * });
+ * // Same API as HTTP client
+ * await client.health();
+ * await client.users();
+ * await client.users.post({ body: { name: 'Alice' } });
+ * await client.users.$id({ path: { id: '123' } });
  * ```
  */
 
-import type {
-  Router,
-  RouterRoutes,
-  RouteDefinition,
-  LocalClientConfig,
-  LocalInvokeOptions,
-  LocalRouterClient,
-} from './types.js';
-import { isRouter, isRoute } from './types.js';
+import type { Router, RouterRoutes, RouteDefinition, Method, ExecutionContext } from './types.js';
+import type { SchemaDefinition, InferSchema } from './schema.js';
+import { isRouter, isRoute, isFunction, HTTP_METHODS } from './types.js';
 import { compileSchema } from './schema.js';
+
+// =============================================================================
+// Configuration Types
+// =============================================================================
+
+/** Local client configuration. */
+export interface LocalClientConfig {
+  env?: unknown;
+  ctx?: ExecutionContext;
+}
+
+/** Options for a local client request. */
+export interface LocalRequestOptions {
+  path?: Record<string, string>;
+  query?: Record<string, unknown>;
+  body?: unknown;
+  env?: unknown;
+  ctx?: ExecutionContext;
+}
+
+// =============================================================================
+// Client Type Construction (mirrors http-client types)
+// =============================================================================
+
+type HttpMethods = 'get' | 'post' | 'put' | 'patch' | 'delete';
+
+type ExtractReturn<T> = T extends (...args: unknown[]) => infer R
+  ? R extends Promise<infer U> ? U : R
+  : unknown;
+
+type BuildOptions<HasPathParams extends boolean, Q, B> =
+  HasPathParams extends true
+    ? { path: Record<string, string> } & (keyof Q extends never ? {} : { query?: Q }) & (keyof B extends never ? {} : { body: B }) & LocalClientConfig
+    : (keyof Q extends never ? {} : { query?: Q }) & (keyof B extends never ? {} : { body: B }) & LocalClientConfig;
+
+type MethodClient<T, HasPathParams extends boolean = false> =
+  T extends RouteDefinition<infer Q, infer B, infer R>
+    ? (options?: BuildOptions<HasPathParams, InferSchema<Q>, InferSchema<B>>) => Promise<R>
+    : T extends (...args: unknown[]) => unknown
+      ? (options?: BuildOptions<HasPathParams, {}, {}>) => Promise<ExtractReturn<T>>
+      : never;
+
+type HasParams<Path extends string[]> =
+  Path extends [infer Head, ...infer Rest extends string[]]
+    ? Head extends `$${string}` ? true : HasParams<Rest>
+    : false;
+
+type RouterClient<T extends RouterRoutes, Path extends string[] = []> = {
+  [K in keyof T as K extends HttpMethods ? K : never]:
+    T[K] extends RouteDefinition | ((...args: unknown[]) => unknown)
+      ? MethodClient<T[K], HasParams<Path>>
+      : never;
+} & {
+  [K in keyof T as K extends HttpMethods ? never : K]:
+    T[K] extends Router<infer Routes>
+      ? RouterClient<Routes, [...Path, K & string]> & ((options?: LocalRequestOptions) => Promise<unknown>)
+      : never;
+} & {
+  (options?: LocalRequestOptions): Promise<unknown>;
+};
+
+export type LocalClient<T extends Router<RouterRoutes>> = {
+  configure(config: LocalClientConfig): void;
+} & RouterClient<T['routes']>;
+
+// =============================================================================
+// Implementation
+// =============================================================================
+
+interface SharedConfig {
+  current: LocalClientConfig;
+}
+
+interface RouteInfo {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  handler: (context: any) => unknown;
+  querySchema?: ReturnType<typeof compileSchema>;
+  bodySchema?: ReturnType<typeof compileSchema>;
+}
+
+/**
+ * Finds a method handler in a router tree.
+ */
+function findHandler(
+  routerDef: Router<RouterRoutes>,
+  segments: string[],
+  method: string
+): RouteInfo | null {
+  let current: Router<RouterRoutes> | undefined = routerDef;
+
+  // Navigate through path segments.
+  for (const segment of segments) {
+    if (!current) return null;
+
+    const entry: unknown = current.routes[segment];
+    if (isRouter(entry)) {
+      current = entry;
+    } else {
+      return null;
+    }
+  }
+
+  if (!current) return null;
+
+  // Find the method handler.
+  const entry = current.routes[method];
+  if (!entry) return null;
+
+  if (isFunction(entry)) {
+    return { handler: entry };
+  }
+
+  if (isRoute(entry)) {
+    const routeDef = entry as RouteDefinition;
+    return {
+      handler: routeDef.handler,
+      querySchema: routeDef.query ? compileSchema(routeDef.query) : undefined,
+      bodySchema: routeDef.body ? compileSchema(routeDef.body) : undefined,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Collects path parameters from segments.
+ */
+function collectPathParams(
+  segments: string[],
+  pathValues?: Record<string, string>
+): Record<string, string> {
+  const params: Record<string, string> = {};
+
+  for (const segment of segments) {
+    if (segment.startsWith('$')) {
+      const paramName = segment.slice(1);
+      const value = pathValues?.[paramName];
+      if (!value) {
+        throw new Error(`Missing path parameter: ${paramName}`);
+      }
+      params[paramName] = value;
+    }
+  }
+
+  return params;
+}
 
 /**
  * Creates a typed local client from a router definition.
  *
- * The local client mirrors the router's structure and invokes handlers directly
- * without HTTP overhead. Useful for testing and server-side operations.
- *
- * @param routerDef - The router definition to create a client for
- * @returns A typed client with a `configure` method and route methods
- *
  * @example
  * ```typescript
- * // Testing example
- * import { describe, it, expect } from 'vitest';
  * import { createLocalClient } from 'typed-routes';
  * import { api } from './api.js';
  *
- * describe('Users API', () => {
- *   const client = createLocalClient(api);
- *   client.configure({ env: { DB: mockDatabase } });
- *
- *   it('creates a user', async () => {
- *     const user = await client.users.create({
- *       body: { name: 'Alice', email: 'alice@example.com' },
- *     });
- *     expect(user.name).toBe('Alice');
- *   });
- * });
- *
- * // Server-side rendering example
  * const client = createLocalClient(api);
- * client.configure({ env: { DB: database } });
+ * client.configure({ env: { DB: mockDatabase } });
  *
- * async function getServerSideProps() {
- *   const data = await client.posts.list({ query: { limit: 10 } });
- *   return { props: { posts: data } };
- * }
+ * await client.health();
+ * await client.users();
+ * await client.users.post({ body: { name: 'Alice' } });
+ * await client.users.$id({ path: { id: '123' } });
  * ```
  */
-export function createLocalClient<T extends RouterRoutes>(
-  routerDef: Router<T>
-): LocalRouterClient<T> {
-  return buildClient(routerDef, '', { current: {} });
-}
-
-/** Internal: builds client recursively with shared config. */
-function buildClient<T extends RouterRoutes>(
-  routerDef: Router<T>,
-  parentPath: string,
-  sharedConfig: { current: LocalClientConfig }
-): LocalRouterClient<T> {
-  const fullBasePath = parentPath + routerDef.basePath;
+export function createLocalClient<T extends Router<RouterRoutes>>(
+  routerDef: T
+): LocalClient<T> {
+  const sharedConfig: SharedConfig = { current: {} };
 
   const client = {
     configure(config: LocalClientConfig) {
       Object.assign(sharedConfig.current, config);
     },
-  } as LocalRouterClient<T>;
+  } as LocalClient<T>;
 
-  populateRoutes(client, routerDef, fullBasePath, sharedConfig);
-
-  return client;
+  return new Proxy(client, {
+    get(target, prop) {
+      if (prop === 'configure') return target.configure;
+      if (typeof prop === 'string') {
+        return createPathProxy(sharedConfig, routerDef, [prop]);
+      }
+      return undefined;
+    },
+    apply(_target, _thisArg, args) {
+      return invokeHandler(sharedConfig, routerDef, [], 'get', args[0] as LocalRequestOptions | undefined);
+    },
+  }) as LocalClient<T>;
 }
 
-/** Populates route methods on a local client object. */
-function populateRoutes<T extends RouterRoutes>(
-  target: Record<string, unknown>,
-  routerDef: Router<T>,
-  basePath: string,
-  sharedConfig: { current: LocalClientConfig }
-): void {
-  for (const [key, entry] of Object.entries(routerDef.routes)) {
-    if (isRouter(entry)) {
-      const nested = {} as Record<string, unknown>;
-      populateRoutes(nested, entry, basePath + entry.basePath, sharedConfig);
-      target[key] = nested;
-    } else if (isRoute(entry)) {
-      target[key] = createLocalRouteInvoker(entry, basePath, sharedConfig);
-    }
-  }
-}
+/** Creates a proxy that tracks path segments. */
+function createPathProxy(
+  sharedConfig: SharedConfig,
+  routerDef: Router<RouterRoutes>,
+  segments: string[]
+): unknown {
+  const callable = (options?: LocalRequestOptions) => {
+    return invokeHandler(sharedConfig, routerDef, segments, 'get', options);
+  };
 
-/**
- * Extracts path parameter names from a route path.
- *
- * @example
- * extractPathParamNames('/users/:id/posts/:postId') // ['id', 'postId']
- */
-function extractPathParamNames(path: string): string[] {
-  const matches = path.matchAll(/:(\w+)/g);
-  return Array.from(matches, (m) => m[1]);
-}
+  return new Proxy(callable, {
+    get(_target, prop) {
+      if (typeof prop !== 'string') return undefined;
 
-/**
- * Substitutes path parameters into a route path template.
- *
- * @example
- * substitutePathParams('/users/:id', { id: '123' }) // '/users/123'
- */
-function substitutePathParams(pathTemplate: string, params: Record<string, string>): string {
-  return pathTemplate.replace(/:(\w+)/g, (_, name) => {
-    const value = params[name];
-    if (value === undefined) {
-      throw new Error(`Missing path parameter: ${name}`);
-    }
-    return encodeURIComponent(value);
+      if (HTTP_METHODS.has(prop)) {
+        return (options?: LocalRequestOptions) => {
+          return invokeHandler(sharedConfig, routerDef, segments, prop as Method, options);
+        };
+      }
+
+      return createPathProxy(sharedConfig, routerDef, [...segments, prop]);
+    },
+    apply(_target, _thisArg, args) {
+      return callable(args[0] as LocalRequestOptions | undefined);
+    },
   });
 }
 
-/** Creates a local invoker function for a route. */
-function createLocalRouteInvoker(
-  routeDef: RouteDefinition,
-  basePath: string,
-  sharedConfig: { current: LocalClientConfig }
-): (options?: LocalInvokeOptions) => Promise<unknown> {
-  // Pre-extract path param names for this route.
-  const fullPathTemplate = basePath + routeDef.path;
-  const pathParamNames = extractPathParamNames(fullPathTemplate);
+/** Invokes a handler directly. */
+async function invokeHandler(
+  sharedConfig: SharedConfig,
+  routerDef: Router<RouterRoutes>,
+  segments: string[],
+  method: string,
+  options?: LocalRequestOptions
+): Promise<unknown> {
+  const config = sharedConfig.current;
+  const routeInfo = findHandler(routerDef, segments, method);
 
-  const routeId = `${routeDef.method.toUpperCase()} ${fullPathTemplate}`;
+  if (!routeInfo) {
+    throw new Error(`No handler found for ${method.toUpperCase()} /${segments.join('/')}`);
+  }
 
-  return async (options: LocalInvokeOptions = {}) => {
-    const config = sharedConfig.current;
+  // Collect path params.
+  const pathParams = collectPathParams(segments, options?.path);
 
-    // Substitute path parameters into the URL.
-    const pathParams = (options.path ?? {}) as Record<string, string>;
-    const fullPath = substitutePathParams(fullPathTemplate, pathParams);
+  // Validate query.
+  let query: unknown = {};
+  if (routeInfo.querySchema) {
+    const result = routeInfo.querySchema.safeParse(options?.query ?? {});
+    if (!result.success) {
+      throw new Error(`Invalid query parameters: ${JSON.stringify(result.error.flatten())}`);
+    }
+    query = result.data;
+  }
 
-    // Validate query params.
-    let query = {};
-    if (routeDef.query) {
-      const querySchema = compileSchema(routeDef.query);
-      const result = querySchema.safeParse(options.query ?? {});
-      if (!result.success) {
-        throw new Error(`[${routeId}] Invalid query parameters: ${JSON.stringify(result.error.flatten())}`);
+  // Validate body.
+  let body: unknown = {};
+  if (routeInfo.bodySchema) {
+    const result = routeInfo.bodySchema.safeParse(options?.body ?? {});
+    if (!result.success) {
+      throw new Error(`Invalid request body: ${JSON.stringify(result.error.flatten())}`);
+    }
+    body = result.data;
+  }
+
+  // Build path for synthetic request URL.
+  const pathParts = segments.map((s) =>
+    s.startsWith('$') ? encodeURIComponent(pathParams[s.slice(1)] || '') : s
+  );
+  const urlPath = '/' + pathParts.join('/');
+  const url = new URL(urlPath, 'http://localhost');
+  if (options?.query) {
+    for (const [key, value] of Object.entries(options.query)) {
+      if (value !== undefined) {
+        url.searchParams.set(key, String(value));
       }
-      query = result.data;
     }
+  }
 
-    // Validate body.
-    let body = {};
-    if (routeDef.body && ['post', 'put', 'patch'].includes(routeDef.method)) {
-      const bodySchema = compileSchema(routeDef.body);
-      const result = bodySchema.safeParse(options.body ?? {});
-      if (!result.success) {
-        throw new Error(`[${routeId}] Invalid request body: ${JSON.stringify(result.error.flatten())}`);
-      }
-      body = result.data;
-    }
-
-    // Build synthetic request.
-    const url = new URL(fullPath, 'http://localhost');
-    if (options.query && typeof options.query === 'object') {
-      for (const [key, value] of Object.entries(options.query as Record<string, unknown>)) {
-        if (value !== undefined) {
-          url.searchParams.set(key, String(value));
-        }
-      }
-    }
-
-    const requestInit: RequestInit = {
-      method: routeDef.method.toUpperCase(),
-    };
-    if (options.body && ['post', 'put', 'patch'].includes(routeDef.method)) {
-      requestInit.headers = { 'Content-Type': 'application/json' };
-      requestInit.body = JSON.stringify(options.body);
-    }
-
-    const request = new Request(url.toString(), requestInit);
-
-    // Call handler directly.
-    if (!routeDef.handler) {
-      return {};
-    }
-
-    // Build unified handler context with flattened params.
-    const context = {
-      request,
-      path: pathParams,
-      query,
-      body,
-      env: options.env ?? config.env,
-      executionCtx: options.ctx ?? config.ctx,
-    } as Parameters<typeof routeDef.handler>[0];
-
-    const result = await routeDef.handler(context);
-
-    // If handler returned a Response, parse it to match httpClient behavior.
-    // If handler returned a plain object, return it directly.
-    if (result instanceof Response) {
-      return result.json();
-    }
-    return result;
+  // Build request.
+  const requestInit: RequestInit = {
+    method: method.toUpperCase(),
   };
+  if (options?.body && ['post', 'put', 'patch'].includes(method)) {
+    requestInit.headers = { 'Content-Type': 'application/json' };
+    requestInit.body = JSON.stringify(options.body);
+  }
+
+  const request = new Request(url.toString(), requestInit);
+
+  // Build context.
+  const context = {
+    request,
+    path: pathParams,
+    query,
+    body,
+    env: options?.env ?? config.env,
+    executionCtx: options?.ctx ?? config.ctx,
+  };
+
+  // Call handler.
+  const result = await routeInfo.handler(context);
+
+  // Parse response if needed.
+  if (result instanceof Response) {
+    return result.json();
+  }
+
+  return result;
 }

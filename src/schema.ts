@@ -14,21 +14,23 @@
  * @example
  * ```typescript
  * // In route definitions
- * route({
- *   method: 'post',
- *   path: '/users',
- *   query: { page: 'number?', limit: 'number?' },
- *   body: {
- *     name: 'string',
- *     age: 'number',
- *     tags: 'string[]?',
- *     address: { city: 'string', zip: 'string?' },
- *   },
- *   handler: async (c) => {
- *     c.query.page;       // number | undefined
- *     c.body.name;        // string
- *     c.body.address.city // string
- *   },
+ * const api = router({
+ *   users: router({
+ *     post: route({
+ *       query: { page: 'number?', limit: 'number?' },
+ *       body: {
+ *         name: 'string',
+ *         age: 'number',
+ *         tags: 'string[]?',
+ *         address: { city: 'string', zip: 'string?' },
+ *       },
+ *       handler: async (c) => {
+ *         c.query.page;       // number | undefined
+ *         c.body.name;        // string
+ *         c.body.address.city // string
+ *       },
+ *     }),
+ *   }),
  * });
  * ```
  */

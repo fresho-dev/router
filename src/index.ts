@@ -7,42 +7,51 @@
  *
  * ## Core Concepts
  *
- * - **Routes** - Define HTTP endpoints with typed path params, query, body, and response
+ * - **Routes** - Define HTTP endpoints with typed query, body, and response
  * - **Routers** - Compose routes into hierarchical APIs with shared middleware
  * - **Clients** - Auto-generated typed HTTP and local clients from router definitions
  *
  * ## Quick Start
  *
  * ```typescript
- * import { route, router, createHttpClient } from 'typed-routes';
+ * // === Server (server/api.ts) ===
+ * import { route, router } from 'typed-routes';
  *
- * // Define routes with full type inference
- * const api = router('/api', {
- *   users: router('/users', {
- *     list: route({ method: 'get', path: '', handler: async () => [] }),
+ * export const api = router({
+ *   health: router({
+ *     get: async () => ({ status: 'ok' }),
+ *   }),
+ *
+ *   users: router({
  *     get: route({
- *       method: 'get',
- *       path: '/:id',
- *       handler: async (c) => ({ id: c.path.id }),
+ *       query: { limit: 'number?' },
+ *       handler: async (c) => db.users.list(c.query.limit),
  *     }),
- *     create: route({
- *       method: 'post',
- *       path: '',
+ *     post: route({
  *       body: { name: 'string', email: 'string' },
- *       handler: async (c) => ({ id: '1', ...c.body }),
+ *       handler: async (c) => db.users.create(c.body),
+ *     }),
+ *     $id: router({
+ *       get: async (c) => db.users.get(c.path.id),
  *     }),
  *   }),
  * });
  *
- * // Server: export fetch handler
  * export default { fetch: api.handler() };
  *
- * // Client: fully typed API calls
- * const client = createHttpClient(api);
- * client.configure({ baseUrl: 'https://api.example.com' });
+ * // === Client ===
+ * import { createHttpClient } from 'typed-routes';
+ * import type { api } from './api';  // Type-only import!
  *
- * const users = await client.users.list();
- * const user = await client.users.get({ path: { id: '123' } });
+ * const client = createHttpClient<typeof api>({ baseUrl: 'https://api.example.com' });
+ *
+ * // GET routes - callable directly or with .get()
+ * await client.health();
+ * const users = await client.users();
+ * const user = await client.users.$id({ path: { id: '123' } });
+ *
+ * // Non-GET routes - use explicit method
+ * await client.users.post({ body: { name: 'Alice', email: 'alice@example.com' } });
  * ```
  *
  * ## Exports
@@ -74,38 +83,34 @@ export {
 // Core type definitions.
 export {
   type Method,
-  type ExtractPathParams,
+  type CollectPathParams,
   type ExecutionContext,
   type Context,
   type TypedResponse,
   type TypedHandler,
   type RouteDefinition,
-  type BaseRoute,
-  type RouterEntry,
+  type MethodEntry,
   type RouterRoutes,
   type Router,
   type FetchHandler,
   isRouter,
   isRoute,
+  isFunction,
 } from './types.js';
 
 // HTTP client types.
 export {
   type HttpClientConfig,
-  type HttpFetchOptions,
-  type HttpRouteClient,
-  type HttpRouterClientRoutes,
-  type HttpRouterClient,
-} from './types.js';
+  type HttpRequestOptions,
+  type HttpClient,
+} from './http-client.js';
 
 // Local client types.
 export {
   type LocalClientConfig,
-  type LocalInvokeOptions,
-  type LocalRouteClient,
-  type LocalRouterClientRoutes,
-  type LocalRouterClient,
-} from './types.js';
+  type LocalRequestOptions,
+  type LocalClient,
+} from './local-client.js';
 
 // Core functions.
 export { route, router } from './core.js';

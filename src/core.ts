@@ -1,89 +1,109 @@
 /**
  * @fileoverview Core route and router creation functions.
  *
- * Provides the main API for defining routes and composing routers.
+ * ## Path Convention
+ * - Property names = URL path segments
+ * - `$param` prefix = dynamic segment (`:param`)
+ * - `get`, `post`, `put`, `patch`, `delete` = HTTP method handlers
+ *
+ * ## Typing Best Practices
+ *
+ * **Schemas** (`query`/`body`) provide runtime validation AND type inference.
+ * Use them for any input that needs validation:
+ * ```typescript
+ * get: route({
+ *   query: { limit: 'number?' },
+ *   handler: async (c) => c.query.limit,  // limit: number | undefined
+ * })
+ * ```
+ *
+ * **Context** (`route.ctx<T>()`) provides types only (no validation).
+ * Use it for path params, env bindings, and middleware-injected values:
+ * ```typescript
+ * interface MyContext {
+ *   path: { id: string };
+ *   env: { DB: Database };
+ *   user: { name: string };  // from auth middleware
+ * }
+ * get: route.ctx<MyContext>()({
+ *   handler: async (c) => ({ id: c.path.id, user: c.user.name }),
+ * })
+ * ```
+ *
+ * **Important:** Don't add explicit type annotations to handler parameters.
+ * Let types flow from schemas and context:
+ * ```typescript
+ * // GOOD: types inferred from schema
+ * handler: async (c) => c.query.limit
+ *
+ * // BAD: redundant type annotation
+ * handler: async (c: { query: { limit?: number } }) => c.query.limit
+ * ```
  */
 
 import type { SchemaDefinition } from './schema.js';
 import type { RouteDefinition, Router, RouterRoutes } from './types.js';
+import { ROUTE_MARKER, ROUTER_MARKER } from './types.js';
 import type { Middleware } from './middleware.js';
 import { createHandler } from './handler.js';
 
 /**
- * Creates a route definition with fully inferred types.
+ * Creates a route with query/body validation schemas.
  *
- * The simplest way to define a route. Path parameters, query schemas, body schemas,
- * and return types are all inferred automatically.
- *
- * @param definition - The route configuration (method, path, query, body, handler)
- * @returns The route definition with inferred types
+ * Use `route()` when you need request validation. For simple handlers
+ * without validation, you can use bare functions directly in the router.
  *
  * @example
  * ```typescript
- * // Basic GET route
- * const getUsers = route({
- *   method: 'get',
- *   path: '/users',
- *   handler: async () => [{ id: '1', name: 'Alice' }],
- * });
- *
- * // Route with path parameters (inferred from :param syntax)
- * const getUser = route({
- *   method: 'get',
- *   path: '/users/:id',
+ * // Route with query validation
+ * get: route({
+ *   query: { limit: 'number?', offset: 'number?' },
  *   handler: async (c) => {
- *     c.path.id;  // string - inferred from path
- *     return { id: c.path.id };
+ *     const items = await db.list(c.query.limit, c.query.offset);
+ *     return { items };
  *   },
- * });
+ * })
  *
- * // Route with query and body validation
- * const createUser = route({
- *   method: 'post',
- *   path: '/users',
- *   query: { notify: 'boolean?' },           // optional boolean
- *   body: { name: 'string', age: 'number' }, // required fields
+ * // Route with body validation
+ * post: route({
+ *   body: { name: 'string', email: 'string' },
  *   handler: async (c) => {
- *     c.query.notify;  // boolean | undefined
- *     c.body.name;     // string
- *     c.body.age;      // number
- *     return { id: '123', ...c.body };
+ *     const user = await db.create(c.body);
+ *     return user;
  *   },
- * });
+ * })
+ *
+ * // Simple handler without validation (bare function)
+ * get: async () => ({ status: 'ok' })
  * ```
- *
- * @see {@link route.ctx} for routes that need typed context (env, middleware props)
  */
 export function route<
-  const P extends string,
   const Q extends SchemaDefinition,
   const B extends SchemaDefinition,
   R = unknown,
->(definition: RouteDefinition<P, Q, B, R, {}>): RouteDefinition<P, Q, B, R, {}> {
-  return definition;
+>(definition: RouteDefinition<Q, B, R, {}, {}>): RouteDefinition<Q, B, R, {}, {}> {
+  return { ...definition, [ROUTE_MARKER]: true } as RouteDefinition<Q, B, R, {}, {}>;
 }
 
 /** Return type of route.ctx<T>() - callable and chainable. */
 interface CtxBuilder<Ctx> {
-  /** Create a route with the accumulated context type. */
-  <const P extends string, const Q extends SchemaDefinition, const B extends SchemaDefinition, R = unknown>(
-    definition: RouteDefinition<P, Q, B, R, Ctx>
-  ): RouteDefinition<P, Q, B, R, Ctx>;
+  <const Q extends SchemaDefinition, const B extends SchemaDefinition, R = unknown>(
+    definition: RouteDefinition<Q, B, R, {}, Ctx>
+  ): RouteDefinition<Q, B, R, {}, Ctx>;
 
-  /** Chain additional context types. */
   ctx<AdditionalCtx>(): CtxBuilder<Ctx & AdditionalCtx>;
 }
 
 /** Creates a chainable context builder. */
 function createCtxBuilder<Ctx>(): CtxBuilder<Ctx> {
   const builder = <
-    const P extends string,
     const Q extends SchemaDefinition,
     const B extends SchemaDefinition,
     R = unknown,
   >(
-    definition: RouteDefinition<P, Q, B, R, Ctx>
-  ): RouteDefinition<P, Q, B, R, Ctx> => definition;
+    definition: RouteDefinition<Q, B, R, {}, Ctx>
+  ): RouteDefinition<Q, B, R, {}, Ctx> =>
+    ({ ...definition, [ROUTE_MARKER]: true }) as RouteDefinition<Q, B, R, {}, Ctx>;
 
   builder.ctx = <AdditionalCtx>() => createCtxBuilder<Ctx & AdditionalCtx>();
 
@@ -91,104 +111,87 @@ function createCtxBuilder<Ctx>(): CtxBuilder<Ctx> {
 }
 
 /**
- * Creates a route with typed context.
+ * Creates a route with typed context for values not covered by schemas.
  *
- * Use this when you need typed access to env bindings and/or middleware-added properties.
- * Supports chaining multiple .ctx<>() calls to compose context types.
+ * Use `route.ctx<T>()` to type:
+ * - **Path params**: `{ path: { id: string } }` for `$id` segments
+ * - **Env bindings**: `{ env: { DB: Database } }` for runtime environment
+ * - **Middleware values**: `{ user: User }` for auth middleware, etc.
+ *
+ * Context provides types only, not runtime validation. For validated inputs,
+ * use `query` and `body` schemas instead.
  *
  * @example
  * ```typescript
- * // Single context type
  * interface AppContext {
- *   env: { KV: KVNamespace; DB: D1Database };
- *   user: { id: string; name: string };
+ *   path: { id: string };
+ *   env: { DB: D1Database };
+ *   user: { id: string };  // injected by auth middleware
  * }
  *
- * const profile = route.ctx<AppContext>()({
- *   method: 'get',
- *   path: '/profile',
- *   handler: async (c) => {
- *     c.env.KV;    // typed
- *     c.user.name; // typed
- *     return { name: c.user.name };
- *   },
- * });
- *
- * // Chained context types
- * interface EnvContext { env: { DB: D1Database } }
- * interface AuthContext { user: { id: string } }
- *
- * const data = route.ctx<EnvContext>().ctx<AuthContext>()({
- *   method: 'get',
- *   path: '/data',
- *   handler: async (c) => {
- *     c.env.DB;  // typed from EnvContext
- *     c.user.id; // typed from AuthContext
- *     return { userId: c.user.id };
- *   },
- * });
+ * $id: router({
+ *   get: route.ctx<AppContext>()({
+ *     query: { include: 'string?' },  // schema for validation
+ *     handler: async (c) => {
+ *       // c.path.id, c.env.DB, c.user.id - from context
+ *       // c.query.include - from schema
+ *       return c.env.DB.get(c.path.id);
+ *     },
+ *   }),
+ * })
  * ```
  */
 route.ctx = function <Ctx>(): CtxBuilder<Ctx> {
   return createCtxBuilder<Ctx>();
 };
 
-
 /**
- * Creates a composable router with optional middleware.
- *
- * Routers group related routes under a common base path and can apply middleware
- * to all routes within. Routers can be nested to create hierarchical APIs.
- *
- * @param basePath - URL prefix for all routes in this router (e.g., '/api', '/users')
- * @param routes - Object mapping route names to route definitions or nested routers
- * @param middleware - Optional middleware functions applied to all routes (in order)
- * @returns A router object with a `.handler()` method for use with fetch-based servers
+ * Creates a router that groups paths and applies middleware.
  *
  * @example
  * ```typescript
- * // Simple router
- * const api = router('/api', {
- *   health: route({ method: 'get', path: '/health', handler: async () => ({ ok: true }) }),
- *   users: route({ method: 'get', path: '/users', handler: async () => [] }),
- * });
- *
- * // Router with middleware
- * const protectedApi = router('/api', {
- *   profile: route.ctx<{ user: User }>()({
- *     method: 'get',
- *     path: '/profile',
- *     handler: async (c) => ({ id: c.user.id }),
+ * const api = router({
+ *   health: router({
+ *     get: async () => ({ status: 'ok' }),
  *   }),
- * }, jwtAuth({ secret, claims: (p) => ({ user: { id: p.sub } }) }));
  *
- * // Nested routers for hierarchy
- * const usersRouter = router('/users', {
- *   list: route({ method: 'get', path: '', handler: async () => [] }),
- *   get: route({ method: 'get', path: '/:id', handler: async (c) => ({ id: c.path.id }) }),
+ *   users: router({
+ *     // GET /users - list users
+ *     get: route({
+ *       query: { limit: 'number?' },
+ *       handler: async (c) => db.users.list(c.query.limit),
+ *     }),
+ *
+ *     // POST /users - create user
+ *     post: route({
+ *       body: { name: 'string', email: 'string' },
+ *       handler: async (c) => db.users.create(c.body),
+ *     }),
+ *
+ *     // /users/:id
+ *     $id: router({
+ *       get: async (c) => db.users.get(c.path.id),
+ *       delete: async (c) => db.users.delete(c.path.id),
+ *     }),
+ *   }),
  * });
  *
- * const api = router('/api', {
- *   users: usersRouter,  // Routes: GET /api/users, GET /api/users/:id
- * });
- *
- * // Use with Cloudflare Workers, Deno, Bun, or any fetch-based server
  * export default { fetch: api.handler() };
  * ```
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function router<T extends RouterRoutes, M extends Middleware<any>[]>(
-  basePath: string,
   routes: T,
   ...middleware: M
 ): Router<T> {
   const self: Router<T> = {
-    basePath,
     routes,
     middleware: middleware.length > 0 ? middleware : undefined,
     handler() {
       return createHandler(self);
     },
   };
+  // Add marker for type checking.
+  (self as unknown as Record<symbol, boolean>)[ROUTER_MARKER] = true;
   return self;
 }

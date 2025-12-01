@@ -9,7 +9,7 @@ describe('docs', () => {
       const spec = generateDocs({
         title: 'Test',
         version: '1.0.0',
-        router: router('', {}),
+        router: router({}),
       }) as Record<string, unknown>;
 
       assert.strictEqual(spec.openapi, '3.0.0');
@@ -19,7 +19,7 @@ describe('docs', () => {
       const spec = generateDocs({
         title: 'My API',
         version: '2.0.0',
-        router: router('', {}),
+        router: router({}),
       }) as Record<string, Record<string, unknown>>;
 
       assert.strictEqual(spec.info.title, 'My API');
@@ -31,7 +31,7 @@ describe('docs', () => {
         title: 'Test',
         version: '1.0.0',
         description: 'API description',
-        router: router('', {}),
+        router: router({}),
       }) as Record<string, Record<string, unknown>>;
 
       assert.strictEqual(spec.info.description, 'API description');
@@ -41,22 +41,24 @@ describe('docs', () => {
       const spec = generateDocs({
         title: 'Test',
         version: '1.0.0',
-        router: router('/api', {
-          users: route({ method: 'get', path: '/users' }),
-          posts: route({ method: 'get', path: '/posts' }),
+        router: router({
+          users: router({ get: async () => [] }),
+          posts: router({ get: async () => [] }),
         }),
       }) as Record<string, Record<string, unknown>>;
 
-      assert.ok(spec.paths['/api/users']);
-      assert.ok(spec.paths['/api/posts']);
+      assert.ok(spec.paths['/users']);
+      assert.ok(spec.paths['/posts']);
     });
 
-    it('converts :param to {param} format', () => {
+    it('converts $param to {param} format', () => {
       const spec = generateDocs({
         title: 'Test',
         version: '1.0.0',
-        router: router('', {
-          user: route({ method: 'get', path: '/users/:id' }),
+        router: router({
+          users: router({
+            $id: router({ get: async (c) => ({ id: c.path.id }) }),
+          }),
         }),
       }) as Record<string, Record<string, unknown>>;
 
@@ -64,11 +66,13 @@ describe('docs', () => {
     });
 
     it('combines nested router paths', () => {
-      const inner = router('/inner', { test: route({ method: 'get', path: '/test' }) });
+      const inner = router({
+        test: router({ get: async () => ({}) }),
+      });
       const spec = generateDocs({
         title: 'Test',
         version: '1.0.0',
-        router: router('/outer', { inner }),
+        router: router({ outer: router({ inner }) }),
       }) as Record<string, Record<string, unknown>>;
 
       assert.ok(spec.paths['/outer/inner/test']);
@@ -78,11 +82,12 @@ describe('docs', () => {
       const spec = generateDocs({
         title: 'Test',
         version: '1.0.0',
-        router: router('', {
-          test: route({
-            method: 'get',
-            path: '/test',
-            query: { required: 'string', optional: 'string?' },
+        router: router({
+          test: router({
+            get: route({
+              query: { required: 'string', optional: 'string?' },
+              handler: async () => ({}),
+            }),
           }),
         }),
       }) as Record<string, Record<string, Record<string, Record<string, Array<Record<string, unknown>>>>>>;
@@ -99,11 +104,12 @@ describe('docs', () => {
       const spec = generateDocs({
         title: 'Test',
         version: '1.0.0',
-        router: router('', {
-          test: route({
-            method: 'get',
-            path: '/test',
-            query: { count: 'number' },
+        router: router({
+          test: router({
+            get: route({
+              query: { count: 'number' },
+              handler: async () => ({}),
+            }),
           }),
         }),
       }) as Record<string, Record<string, Record<string, Record<string, Array<Record<string, Record<string, string>>>>>>>;
@@ -116,11 +122,12 @@ describe('docs', () => {
       const spec = generateDocs({
         title: 'Test',
         version: '1.0.0',
-        router: router('', {
-          test: route({
-            method: 'post',
-            path: '/test',
-            body: { name: 'string', age: 'number?' },
+        router: router({
+          test: router({
+            post: route({
+              body: { name: 'string', age: 'number?' },
+              handler: async () => ({}),
+            }),
           }),
         }),
       }) as Record<string, Record<string, Record<string, Record<string, unknown>>>>;
@@ -140,8 +147,8 @@ describe('docs', () => {
       const spec = generateDocs({
         title: 'Test',
         version: '1.0.0',
-        router: router('', {
-          test: route({ method: 'get', path: '/test' }),
+        router: router({
+          test: router({ get: async () => ({}) }),
         }),
       }) as Record<string, Record<string, Record<string, Record<string, unknown>>>>;
 
@@ -152,11 +159,12 @@ describe('docs', () => {
       const spec = generateDocs({
         title: 'Test',
         version: '1.0.0',
-        router: router('', {
-          test: route({
-            method: 'get',
-            path: '/test',
-            description: 'Get test data',
+        router: router({
+          test: router({
+            get: route({
+              description: 'Get test data',
+              handler: async () => ({}),
+            }),
           }),
         }),
       }) as Record<string, Record<string, Record<string, Record<string, unknown>>>>;
@@ -168,8 +176,8 @@ describe('docs', () => {
       const spec = generateDocs({
         title: 'Test',
         version: '1.0.0',
-        router: router('', {
-          test: route({ method: 'get', path: '/test' }),
+        router: router({
+          test: router({ get: async () => ({}) }),
         }),
       }) as Record<string, Record<string, Record<string, Record<string, Record<string, unknown>>>>>;
 

@@ -1,7 +1,15 @@
 /**
  * @fileoverview Core type definitions for the routing library.
  *
- * Contains all type definitions used across modules.
+ * **Path Convention:**
+ * - Property names = URL path segments
+ * - `$param` prefix = dynamic segment (`:param`)
+ * - `get`, `post`, `put`, `patch`, `delete` = HTTP method handlers
+ *
+ * **Structure:**
+ * - `router({ ... })` - groups paths, can have middleware
+ * - `route({ query?, body?, handler })` - single method with schemas
+ * - Bare functions as shorthand for handlers without schemas
  */
 
 import type { SchemaDefinition, InferSchema } from './schema.js';
@@ -10,90 +18,32 @@ import type { Middleware } from './middleware.js';
 /** Standard HTTP methods. */
 export type Method = 'get' | 'post' | 'put' | 'patch' | 'delete' | 'options' | 'head';
 
-/**
- * Extracts path parameters from a route path string.
- *
- * @example
- * ```typescript
- * type Params = ExtractPathParams<'/users/:id'>
- * // Result: { id: string }
- *
- * type Params2 = ExtractPathParams<'/users/:userId/posts/:postId'>
- * // Result: { userId: string; postId: string }
- *
- * type NoParams = ExtractPathParams<'/users'>
- * // Result: {}
- * ```
- */
-/**
- * Delimiters that terminate a path parameter name.
- *
- * When parsing `:param` in a path, the param name ends at the first delimiter.
- * This allows patterns like `/files/:name.pdf` where `.pdf` is a literal suffix.
- */
-type Delimiter = '/' | '.' | '-';
+/** HTTP method property names. */
+export const HTTP_METHODS = new Set<string>(['get', 'post', 'put', 'patch', 'delete', 'options', 'head']);
+
+/** Symbol to mark an object as a route definition. */
+export const ROUTE_MARKER = Symbol.for('typed-routes:route');
+
+/** Symbol to mark an object as a router. */
+export const ROUTER_MARKER = Symbol.for('typed-routes:router');
 
 /**
- * Extracts a parameter name from a string, stopping at the first delimiter.
- *
- * Uses character-by-character recursion to achieve non-greedy matching, since
- * TypeScript's template literal inference is greedy by default.
- *
- * @typeParam T - The string to extract from (everything after the `:`)
- * @typeParam Acc - Accumulator for characters seen so far (internal, starts empty)
- * @returns A tuple of [paramName, remainingString]
- *
- * @example
- * ```typescript
- * type R1 = ExtractParamName<'id'>        // ['id', '']
- * type R2 = ExtractParamName<'name.pdf'>  // ['name', '.pdf']
- * type R3 = ExtractParamName<'a-:b.mp3'>  // ['a', '-:b.mp3']
- * ```
+ * Extracts the parameter name from a `$param` property name.
  */
-type ExtractParamName<T extends string, Acc extends string = ''> =
-  T extends `${infer C}${infer Rest}`
-    ? C extends Delimiter
-      ? [Acc, `${C}${Rest}`]  // Hit delimiter: return accumulated name + rest
-      : ExtractParamName<Rest, `${Acc}${C}`>  // Continue: add char to accumulator
-    : [Acc, ''];  // End of string: return accumulated name
+export type ExtractParamFromProperty<T extends string> =
+  T extends `$${infer Param}` ? Param : never;
 
 /**
- * Extracts path parameters from a route path string.
- *
- * Parses `:param` segments and returns a type representing all parameters.
- * Handles parameters followed by literal suffixes (e.g., `.pdf`, `-suffix`).
- *
- * The runtime `pathToRegex` function in handler.ts uses the same logic:
- * params are `:[a-zA-Z0-9_]+` and literals (including `.`, `-`) are escaped.
- *
- * @example
- * ```typescript
- * // Simple params
- * type T1 = ExtractPathParams<'/users/:id'>
- * // Result: { id: string }
- *
- * // Multiple params
- * type T2 = ExtractPathParams<'/users/:userId/posts/:postId'>
- * // Result: { userId: string; postId: string }
- *
- * // Params with file extensions
- * type T3 = ExtractPathParams<'/files/:name.pdf'>
- * // Result: { name: string }
- *
- * // Multiple params with delimiters
- * type T4 = ExtractPathParams<'/audio/:artist-:track.mp3'>
- * // Result: { artist: string; track: string }
- *
- * // No params
- * type T5 = ExtractPathParams<'/static/page'>
- * // Result: {}
- * ```
+ * Checks if a property name is a dynamic parameter (starts with $).
  */
-export type ExtractPathParams<T extends string> =
-  T extends `${string}:${infer Rest}`
-    ? ExtractParamName<Rest> extends [infer Param extends string, infer Remaining extends string]
-      ? { [K in Param]: string } & ExtractPathParams<Remaining>
-      : {}
+export type IsParamProperty<T extends string> = T extends `$${string}` ? true : false;
+
+/**
+ * Collects path params from a property path array.
+ */
+export type CollectPathParams<Path extends string[]> =
+  Path extends [infer Head extends string, ...infer Rest extends string[]]
+    ? (Head extends `$${infer Param}` ? { [K in Param]: string } : {}) & CollectPathParams<Rest>
     : {};
 
 /** Execution context for background tasks (Cloudflare Workers compatible). */
@@ -104,151 +54,121 @@ export interface ExecutionContext {
 
 /**
  * Unified context object passed to handlers.
- *
- * Contains the request, validated params (path, query, body), env, and middleware-added properties.
- *
- * @typeParam Q - Query parameter type
- * @typeParam B - Body type
- * @typeParam P - Path parameters (extracted from path string or Record<string, string>)
- * @typeParam Ctx - Context type including env and middleware-added properties
- *
- * @example
- * ```typescript
- * interface AppContext {
- *   env: { KV: KVNamespace; DB: D1Database };
- *   user: { id: string; name: string };
- * }
- *
- * const handler = (c: Context<{ page?: number }, {}, '/users/:id', AppContext>) => {
- *   c.request;    // Original Request
- *   c.path.id;    // Typed path param
- *   c.query.page; // Typed query param
- *   c.env.KV;     // Typed env binding
- *   c.user;       // From middleware
- * };
- * ```
  */
 export type Context<
   Q = unknown,
   B = unknown,
-  P extends string | Record<string, string> = Record<string, string>,
+  P extends Record<string, string> = Record<string, string>,
   Ctx = {},
 > = {
-  /** The original Request (untouched). */
+  /** The original Request. */
   request: Request;
-
-  /** URL path parameters (e.g., { id: '123' } for /users/:id). */
-  path: P extends string ? ExtractPathParams<P> : P;
-
+  /** URL path parameters from `$param` segments. */
+  path: P;
   /** Query string parameters. */
   query: Q;
-
   /** Request body. */
   body: B;
-
-  /** Execution context for background tasks (Cloudflare Workers). */
+  /** Execution context for background tasks. */
   executionCtx?: ExecutionContext;
-
-  /** Environment bindings (Cloudflare Workers, Deno, etc.). */
+  /** Environment bindings. */
   env: Ctx extends { env: infer E } ? E : unknown;
 } & Omit<Ctx, 'env'>;
 
 /**
  * Typed response wrapper that carries the response body type.
- *
- * This is a branded Response type that preserves the JSON body type for client inference.
- * At runtime it's just a standard Response, but TypeScript knows the body type.
- *
- * @example
- * ```typescript
- * const handler = () => {
- *   return Response.json({ id: '123', name: 'Alice' }) as TypedResponse<{ id: string; name: string }>;
- * };
- * ```
  */
 export type TypedResponse<T> = Response & { __responseType?: T };
 
 /**
- * Handler function with unified context argument and typed response.
+ * Handler function type.
+ */
+export type TypedHandler<
+  Q = unknown,
+  B = unknown,
+  P extends Record<string, string> = Record<string, string>,
+  R = unknown,
+  Ctx = {},
+> = (context: Context<Q, B, P, Ctx>) => R | Response | TypedResponse<R> | Promise<R | Response | TypedResponse<R>>;
+
+/**
+ * Route definition - a single HTTP method handler with optional schemas.
  *
- * Receives a single Context object containing request, params, env, and middleware-added properties.
- * Returns either a raw Response, or a value that will be auto-wrapped in Response.json().
- *
- * @typeParam Q - Query parameter type
- * @typeParam B - Body type
- * @typeParam P - Path string for param extraction
- * @typeParam R - Response body type (inferred from return)
- * @typeParam Ctx - Context type including env and middleware-added properties
+ * Use `route()` when you need query or body validation schemas.
+ * For simple handlers without schemas, use bare functions in the router.
  *
  * @example
  * ```typescript
- * interface AppContext {
- *   env: { DB: D1Database };
- *   user: { id: string };
- * }
+ * // With schemas
+ * get: route({
+ *   query: { limit: 'number?' },
+ *   handler: async (c) => ({ items: [], limit: c.query.limit }),
+ * })
  *
- * const handler: TypedHandler<{ page: number }, {}, '/users/:id', User, AppContext> = (c) => {
- *   c.request;           // Original Request
- *   c.path.id;    // Typed path param
- *   c.query.page; // Typed query param
- *   c.env.DB;            // Typed env binding
- *   c.user;              // From middleware
- *   return Response.json({ id: c.path.id });
- * };
+ * // Without schemas (bare function shorthand)
+ * get: async (c) => ({ items: [] })
  * ```
  */
-export type TypedHandler<Q, B, P extends string = string, R = unknown, Ctx = {}> = (
-  context: Context<Q, B, P, Ctx>
-) => R | Response | TypedResponse<R> | Promise<R | Response | TypedResponse<R>>;
-
-/**
- * Route definition with optional handler and response type.
- *
- * @typeParam P - Path string with optional `:param` segments
- * @typeParam Q - Query parameter schema definition
- * @typeParam B - Request body schema definition
- * @typeParam R - Response body type (inferred from handler return)
- * @typeParam Ctx - Context type for env and middleware-added properties
- */
 export interface RouteDefinition<
-  P extends string = string,
   Q extends SchemaDefinition = {},
   B extends SchemaDefinition = {},
   R = unknown,
+  P extends Record<string, string> = Record<string, string>,
   Ctx = {},
 > {
-  /** HTTP method (get, post, put, patch, delete, options, head). */
-  method: Method;
-  /** URL path with optional parameters (e.g., '/users/:id'). */
-  path: P;
   /** Query parameter schema for validation. */
   query?: Q;
-  /** Request body schema for validation (POST, PUT, PATCH only). */
+  /** Request body schema for validation. */
   body?: B;
-  /** Optional description for documentation generation. */
+  /** Optional description for documentation. */
   description?: string;
-  /** Request handler function. */
-  handler?: TypedHandler<InferSchema<Q>, InferSchema<B>, P, R, Ctx>;
+  /** The request handler function. */
+  handler: TypedHandler<InferSchema<Q>, InferSchema<B>, P, R, Ctx>;
 }
 
-/** Base structure for route entries (excludes handler for type compatibility). */
-export type BaseRoute = Omit<RouteDefinition, 'handler'> & { handler?: unknown };
+/** A bare handler function (shorthand for route without schemas). */
+export type BareHandler = (context: Context<unknown, unknown, Record<string, string>, unknown>) => unknown;
 
-/** A router entry is either a route or a nested router. */
-export type RouterEntry = BaseRoute | Router<RouterRoutes>;
-
-/** Router routes record. */
-export type RouterRoutes = Record<string, RouterEntry>;
-
-/** Checks if entry is a Router (has basePath property). */
-export function isRouter(entry: unknown): entry is Router<RouterRoutes> {
-  return typeof entry === 'object' && entry !== null && 'basePath' in entry;
+/** Checks if a value is a function. */
+export function isFunction(value: unknown): value is BareHandler {
+  return typeof value === 'function';
 }
 
-/** Checks if entry is a Route (has method property). */
+/** Checks if entry is a Route (marked with ROUTE_MARKER). */
 export function isRoute(entry: unknown): entry is RouteDefinition {
-  return typeof entry === 'object' && entry !== null && 'method' in entry;
+  return typeof entry === 'object' && entry !== null && ROUTE_MARKER in entry;
 }
+
+/** Checks if entry is a Router (marked with ROUTER_MARKER). */
+export function isRouter(entry: unknown): entry is Router<RouterRoutes> {
+  return typeof entry === 'object' && entry !== null && ROUTER_MARKER in entry;
+}
+
+/**
+ * A method handler - either a route with schemas or a bare function.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type MethodEntry = RouteDefinition<any, any, any, any, any> | BareHandler;
+
+/**
+ * Router routes record.
+ *
+ * Can contain:
+ * - `get`, `post`, `put`, `patch`, `delete` - method handlers (route or function)
+ * - Other property names - nested routers (path segments)
+ * - `$param` properties - dynamic path segments
+ */
+export type RouterRoutes = {
+  get?: MethodEntry;
+  post?: MethodEntry;
+  put?: MethodEntry;
+  patch?: MethodEntry;
+  delete?: MethodEntry;
+  options?: MethodEntry;
+  head?: MethodEntry;
+} & {
+  [key: string]: MethodEntry | Router<RouterRoutes>;
+};
 
 /** Handler function signature for the standalone router. */
 export type FetchHandler = (
@@ -258,166 +178,32 @@ export type FetchHandler = (
 ) => Response | Promise<Response>;
 
 /**
- * Router with base path, nested routes, and optional middleware.
+ * Router - groups paths and can have middleware.
  *
- * Created via the `router()` function. Can be nested within other routers
- * to create hierarchical API structures.
+ * @example
+ * ```typescript
+ * const api = router({
+ *   // Method handlers for this path
+ *   get: async (c) => [...],
+ *   post: route({ body: { name: 'string' }, handler: async (c) => c.body }),
  *
- * @typeParam T - The routes record type
+ *   // Nested path segments
+ *   users: router({
+ *     get: async (c) => [...],
+ *     $id: router({
+ *       get: async (c) => ({ id: c.path.id }),
+ *     }),
+ *   }),
+ * });
+ * ```
  */
 export interface Router<T extends RouterRoutes> {
-  /** URL prefix for all routes in this router. */
-  readonly basePath: string;
   /** Route definitions and nested routers. */
   readonly routes: T;
   /** Middleware applied to all routes in this router. */
   readonly middleware?: Middleware[];
   /**
    * Creates a fetch handler for use with Cloudflare Workers, Deno, Bun, etc.
-   *
-   * @example
-   * ```typescript
-   * const api = router('/api', { ... });
-   * export default { fetch: api.handler() };
-   * ```
    */
   handler(): FetchHandler;
 }
-
-// =============================================================================
-// Shared Client Types
-// =============================================================================
-
-/**
- * Base options with path params required when route has path params.
- *
- * Uses `{} extends ExtractPathParams<P>` check because `Record<string, never>` has a
- * string index signature, making `keyof` return `string` instead of `never`.
- */
-type OptionsWithPath<
-  Opts extends { path?: unknown },
-  P extends string,
-> = {} extends ExtractPathParams<P>
-  ? Opts & { path?: never }
-  : Omit<Opts, 'path'> & { path: ExtractPathParams<P> };
-
-/**
- * Route client method signature based on path, query, body, and response types.
- *
- * Determines if options parameter is required or optional based on whether
- * the route has path params, query params, or body.
- */
-type RouteClientMethod<
-  P extends string,
-  Q extends SchemaDefinition,
-  B extends SchemaDefinition,
-  R,
-  Opts extends { path?: unknown; query?: unknown; body?: unknown },
-> =
-  // If no path params, options may be optional (depending on query/body).
-  {} extends ExtractPathParams<P>
-    ? keyof Q extends never
-      ? keyof B extends never
-        ? (options?: Opts & { path?: never; query?: never; body?: never }) => Promise<R>
-        : (options: Opts & { path?: never; query?: never; body: InferSchema<B> }) => Promise<R>
-      : keyof B extends never
-        ? (options?: Opts & { path?: never; query?: InferSchema<Q>; body?: never }) => Promise<R>
-        : (options: Opts & { path?: never; query?: InferSchema<Q>; body: InferSchema<B> }) => Promise<R>
-    : // Has path params - options is always required.
-      keyof Q extends never
-      ? keyof B extends never
-        ? (options: OptionsWithPath<Opts, P> & { query?: never; body?: never }) => Promise<R>
-        : (options: OptionsWithPath<Opts, P> & { query?: never; body: InferSchema<B> }) => Promise<R>
-      : keyof B extends never
-        ? (options: OptionsWithPath<Opts, P> & { query?: InferSchema<Q>; body?: never }) => Promise<R>
-        : (options: OptionsWithPath<Opts, P> & { query?: InferSchema<Q>; body: InferSchema<B> }) => Promise<R>;
-
-// =============================================================================
-// HTTP Client Types
-// =============================================================================
-
-/** Header value that can be static or dynamic (sync or async). */
-export type HeaderValue = string | (() => string | null | undefined | Promise<string | null | undefined>);
-
-/** Headers configuration with support for dynamic values. */
-export type DynamicHeaders = Record<string, HeaderValue>;
-
-/** HTTP client configuration. */
-export interface HttpClientConfig {
-  baseUrl?: string;
-  /** Headers to send with every request. Values can be strings or functions that return strings. */
-  headers?: DynamicHeaders;
-  /** Credentials mode for fetch requests (for cookie-based auth, use 'include'). */
-  credentials?: RequestCredentials;
-}
-
-/** HTTP fetch options for a route. */
-export interface HttpFetchOptions {
-  path?: Record<string, string>;
-  query?: unknown;
-  body?: unknown;
-  headers?: HeadersInit;
-}
-
-/** HTTP client method for a single route. */
-export type HttpRouteClient<
-  P extends string,
-  Q extends SchemaDefinition,
-  B extends SchemaDefinition,
-  R = unknown,
-> = RouteClientMethod<P, Q, B, R, HttpFetchOptions>;
-
-/** Nested routes without configure (used for nested routers). */
-export type HttpRouterClientRoutes<T extends RouterRoutes> = {
-  [K in keyof T]: T[K] extends Router<infer Routes>
-    ? HttpRouterClientRoutes<Routes>
-    : T[K] extends RouteDefinition<infer P, infer Q, infer B, infer R, infer _Ctx>
-      ? HttpRouteClient<P, Q, B, R>
-      : never;
-};
-
-/** Top-level HTTP client type for router (configure only at top level). */
-export type HttpRouterClient<T extends RouterRoutes> = {
-  configure(config: HttpClientConfig): void;
-} & HttpRouterClientRoutes<T>;
-
-// =============================================================================
-// Local Client Types
-// =============================================================================
-
-/** Local client configuration. */
-export interface LocalClientConfig {
-  env?: unknown;
-  ctx?: ExecutionContext;
-}
-
-/** Local invoke options for a route. */
-export interface LocalInvokeOptions {
-  path?: Record<string, string>;
-  query?: unknown;
-  body?: unknown;
-  env?: unknown;
-  ctx?: ExecutionContext;
-}
-
-/** Local client method for a single route. */
-export type LocalRouteClient<
-  P extends string,
-  Q extends SchemaDefinition,
-  B extends SchemaDefinition,
-  R = unknown,
-> = RouteClientMethod<P, Q, B, R, LocalInvokeOptions>;
-
-/** Nested routes without configure (used for nested routers). */
-export type LocalRouterClientRoutes<T extends RouterRoutes> = {
-  [K in keyof T]: T[K] extends Router<infer Routes>
-    ? LocalRouterClientRoutes<Routes>
-    : T[K] extends RouteDefinition<infer P, infer Q, infer B, infer R, infer _Ctx>
-      ? LocalRouteClient<P, Q, B, R>
-      : never;
-};
-
-/** Top-level local client type for router (configure only at top level). */
-export type LocalRouterClient<T extends RouterRoutes> = {
-  configure(config: LocalClientConfig): void;
-} & LocalRouterClientRoutes<T>;

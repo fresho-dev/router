@@ -46,11 +46,13 @@ const timing: Middleware = async (ctx, next) => {
 Add middleware to a router after the routes:
 
 ```typescript
-import { router, route } from 'typed-routes';
+import { router } from 'typed-routes';
 import { cors, errorHandler } from 'typed-routes/middleware';
 
-const api = router('/api', {
-  hello: route({ method: 'get', path: '/hello', handler: async () => ({ message: 'Hello' }) }),
+const api = router({
+  hello: router({
+    get: async () => ({ message: 'Hello' }),
+  }),
 }, cors(), errorHandler(), timing);
 ```
 
@@ -107,14 +109,14 @@ const auth: Middleware = async (ctx, next) => {
 };
 
 // Route handler receives the context with user
-const profile = route.ctx<{ user: User }>()({
-  method: 'get',
-  path: '/profile',
-  handler: async (c) => {
-    // c.user is typed as User
-    return { name: c.user.name };
-  },
-});
+profile: router({
+  get: route.ctx<{ user: User }>()({
+    handler: async (c) => {
+      // c.user is typed as User
+      return { name: c.user.name };
+    },
+  }),
+})
 ```
 
 The `route.ctx<T>()` builder tells TypeScript what context properties the handler expects.
@@ -161,11 +163,11 @@ Quick example:
 ```typescript
 import { jwtAuth } from 'typed-routes/middleware';
 
-const api = router('/api', {
-  profile: route.ctx<{ user: { id: string } }>()({
-    method: 'get',
-    path: '/profile',
-    handler: async (c) => ({ id: c.user.id }),
+const api = router({
+  profile: router({
+    get: route.ctx<{ user: { id: string } }>()({
+      handler: async (c) => ({ id: c.user.id }),
+    }),
   }),
 },
   jwtAuth({
@@ -247,20 +249,20 @@ Supports errors with `status` or `statusCode` properties for custom HTTP status 
 Use the `HttpError` class to throw errors with specific status codes:
 
 ```typescript
-import { route } from 'typed-routes';
+import { route, router } from 'typed-routes';
 import { errorHandler, HttpError } from 'typed-routes/middleware';
 
-const api = router('/api', {
-  getUser: route({
-    method: 'get',
-    path: '/users/:id',
-    handler: async (c) => {
-      const user = await db.findUser(c.path.id);
-      if (!user) throw new HttpError('User not found', 404);
-      return user;
-    },
+const api = router({
+  users: router({
+    $id: router({
+      get: async (c) => {
+        const user = await db.findUser(c.path.id);
+        if (!user) throw new HttpError('User not found', 404);
+        return user;
+      },
+    }),
   }),
-}, [errorHandler()]);
+}, errorHandler());
 ```
 
 This keeps handler return types clean (just `User`, not `User | Response`) while still allowing custom error responses.
@@ -293,15 +295,20 @@ To skip logging for certain paths, use separate routers:
 
 ```typescript
 // Health check without logging
-const healthRouter = router('/health', {
-  check: route({ method: 'get', path: '', handler: async () => ({ status: 'ok' }) }),
+const healthRouter = router({
+  get: async () => ({ status: 'ok' }),
 });
 
 // API routes with logging
-const apiRouter = router('/api', routes, logger());
+const apiRouter = router({
+  users: router({ ... }),
+}, logger());
 
 // Combine
-const app = router('', { health: healthRouter, api: apiRouter });
+const app = router({
+  health: healthRouter,
+  api: apiRouter,
+});
 ```
 
 ---
@@ -421,7 +428,9 @@ const security = compose(
   errorHandler(),
 );
 
-const api = router('/api', routes, security);
+const api = router({
+  users: router({ ... }),
+}, security);
 ```
 
 ---

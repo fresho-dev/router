@@ -11,30 +11,28 @@
  *
  * @example
  * ```typescript
- * import { route, sseResponse, streamJsonLines } from 'typed-routes';
+ * import { router, sseResponse, streamJsonLines } from 'typed-routes';
  *
- * // SSE for real-time updates
- * const events = route({
- *   method: 'get',
- *   path: '/events',
- *   handler: async () => sseResponse(async (send, close) => {
- *     for (let i = 0; i < 10; i++) {
- *       send({ event: 'tick', data: { count: i } });
- *       await sleep(1000);
- *     }
- *     close();
+ * const api = router({
+ *   // SSE for real-time updates
+ *   events: router({
+ *     get: async () => sseResponse(async (send, close) => {
+ *       for (let i = 0; i < 10; i++) {
+ *         send({ event: 'tick', data: { count: i } });
+ *         await sleep(1000);
+ *       }
+ *       close();
+ *     }),
  *   }),
- * });
  *
- * // NDJSON for streaming data
- * const export = route({
- *   method: 'get',
- *   path: '/export',
- *   handler: async () => streamJsonLines(async (send, close) => {
- *     for await (const row of database.stream()) {
- *       send(row);
- *     }
- *     close();
+ *   // NDJSON for streaming data
+ *   export: router({
+ *     get: async () => streamJsonLines(async (send, close) => {
+ *       for await (const row of database.stream()) {
+ *         send(row);
+ *       }
+ *       close();
+ *     }),
  *   }),
  * });
  * ```

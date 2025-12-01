@@ -5,18 +5,14 @@ import { route, router } from './core.js';
 describe('core', () => {
   describe('route()', () => {
     it('creates a route definition with all properties', () => {
-      const handler = async () => Response.json({});
+      const handler = async () => ({ data: [] });
       const r = route({
-        method: 'get',
-        path: '/users',
         query: { limit: 'number?', offset: 'number?' },
         body: { name: 'string' },
         description: 'List users',
         handler,
       });
 
-      assert.strictEqual(r.method, 'get');
-      assert.strictEqual(r.path, '/users');
       assert.deepStrictEqual(r.query, { limit: 'number?', offset: 'number?' });
       assert.deepStrictEqual(r.body, { name: 'string' });
       assert.strictEqual(r.description, 'List users');
@@ -24,82 +20,85 @@ describe('core', () => {
     });
 
     it('works with minimal properties', () => {
-      const r = route({ method: 'get', path: '/health' });
-      assert.strictEqual(r.method, 'get');
-      assert.strictEqual(r.path, '/health');
+      const handler = async () => ({ status: 'ok' });
+      const r = route({ handler });
+      assert.strictEqual(r.handler, handler);
       assert.strictEqual(r.query, undefined);
       assert.strictEqual(r.body, undefined);
     });
 
     it('supports all HTTP methods', () => {
-      const methods = ['get', 'post', 'put', 'patch', 'delete', 'options'] as const;
-      for (const method of methods) {
-        const r = route({ method, path: '/test' });
-        assert.strictEqual(r.method, method);
-      }
+      // Methods are now determined by where route is placed in router,
+      // not a property of the route itself.
+      const handler = async () => ({});
+      const r = router({
+        get: route({ handler }),
+        post: route({ handler }),
+        put: route({ handler }),
+        patch: route({ handler }),
+        delete: route({ handler }),
+      });
+      assert.ok(r.routes.get);
+      assert.ok(r.routes.post);
+      assert.ok(r.routes.put);
+      assert.ok(r.routes.patch);
+      assert.ok(r.routes.delete);
     });
   });
 
   describe('router()', () => {
-    it('creates a router with base path and routes', () => {
-      const r = router('/api', {
-        users: route({ method: 'get', path: '/users' }),
+    it('creates a router with routes', () => {
+      const r = router({
+        users: router({
+          get: async () => [],
+        }),
       });
 
-      assert.strictEqual(r.basePath, '/api');
       assert.ok(r.routes.users);
     });
 
     it('supports nested routers', () => {
-      const inner = router('/inner', {
-        test: route({ method: 'get', path: '/test' }),
+      const inner = router({
+        get: async () => ({ test: true }),
       });
-      const outer = router('/outer', { inner });
+      const outer = router({ inner });
 
-      assert.strictEqual(outer.routes.inner.basePath, '/inner');
-      assert.strictEqual(outer.routes.inner.routes.test.path, '/test');
+      assert.ok(outer.routes.inner);
+      assert.ok(outer.routes.inner.routes.get);
     });
 
     it('supports deeply nested routers (3+ levels)', () => {
-      const level3 = router('/l3', { r: route({ method: 'get', path: '/r' }) });
-      const level2 = router('/l2', { level3 });
-      const level1 = router('/l1', { level2 });
+      const level3 = router({ get: async () => ({ level: 3 }) });
+      const level2 = router({ level3 });
+      const level1 = router({ level2 });
 
-      assert.strictEqual(level1.routes.level2.routes.level3.routes.r.path, '/r');
+      assert.ok(level1.routes.level2.routes.level3.routes.get);
     });
 
     it('provides handler() method', () => {
-      const r = router('/api', {});
+      const r = router({});
       assert.strictEqual(typeof r.handler, 'function');
     });
 
-    it('handles empty base path', () => {
-      const r = router('', { test: route({ method: 'get', path: '/test' }) });
-      assert.strictEqual(r.basePath, '');
-    });
-
     it('handles empty routes object', () => {
-      const r = router('/api', {});
-      assert.strictEqual(r.basePath, '/api');
+      const r = router({});
       assert.deepStrictEqual(r.routes, {});
     });
 
     it('preserves route properties in routes object', () => {
-      const handler = async () => Response.json({});
-      const r = router('/api', {
-        users: route({
-          method: 'post',
-          path: '/users',
-          query: { limit: 'number' },
-          body: { name: 'string' },
-          description: 'Create user',
-          handler,
+      const handler = async () => ({ created: true });
+      const r = router({
+        users: router({
+          post: route({
+            query: { limit: 'number' },
+            body: { name: 'string' },
+            description: 'Create user',
+            handler,
+          }),
         }),
       });
 
-      const usersRoute = r.routes.users;
-      assert.strictEqual(usersRoute.method, 'post');
-      assert.strictEqual(usersRoute.path, '/users');
+      const usersRoute = r.routes.users.routes.post as { query?: unknown; body?: unknown; description?: string };
       assert.deepStrictEqual(usersRoute.query, { limit: 'number' });
       assert.deepStrictEqual(usersRoute.body, { name: 'string' });
       assert.strictEqual(usersRoute.description, 'Create user');

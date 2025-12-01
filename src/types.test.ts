@@ -1,17 +1,17 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { isRouter, isRoute, type ExtractPathParams } from './types.js';
+import { isRouter, isRoute, type CollectPathParams } from './types.js';
 import { route, router } from './core.js';
 
 describe('types', () => {
   describe('isRouter()', () => {
     it('returns true for router objects', () => {
-      const r = router('/api', {});
+      const r = router({});
       assert.strictEqual(isRouter(r), true);
     });
 
     it('returns false for route objects', () => {
-      const r = route({ method: 'get', path: '/test' });
+      const r = route({ handler: async () => ({}) });
       assert.strictEqual(isRouter(r), false);
     });
 
@@ -29,23 +29,24 @@ describe('types', () => {
       assert.strictEqual(isRouter(true), false);
     });
 
-    it('returns false for plain objects without basePath', () => {
-      assert.strictEqual(isRouter({ method: 'get' }), false);
+    it('returns false for plain objects without ROUTER_MARKER', () => {
+      assert.strictEqual(isRouter({ routes: {} }), false);
     });
 
-    it('returns true for objects with basePath property', () => {
-      assert.strictEqual(isRouter({ basePath: '/api', routes: {} }), true);
+    it('returns true for router objects with routes', () => {
+      const r = router({ test: router({ get: async () => ({}) }) });
+      assert.strictEqual(isRouter(r), true);
     });
   });
 
   describe('isRoute()', () => {
     it('returns true for route objects', () => {
-      const r = route({ method: 'get', path: '/test' });
+      const r = route({ handler: async () => ({}) });
       assert.strictEqual(isRoute(r), true);
     });
 
     it('returns false for router objects', () => {
-      const r = router('/api', {});
+      const r = router({});
       assert.strictEqual(isRoute(r), false);
     });
 
@@ -63,74 +64,79 @@ describe('types', () => {
       assert.strictEqual(isRoute(true), false);
     });
 
-    it('returns false for plain objects without method', () => {
-      assert.strictEqual(isRoute({ path: '/test' }), false);
+    it('returns false for plain objects without ROUTE_MARKER', () => {
+      assert.strictEqual(isRoute({ handler: () => ({}) }), false);
     });
 
-    it('returns true for objects with method property', () => {
-      assert.strictEqual(isRoute({ method: 'get' }), true);
+    it('returns true for route objects with schemas', () => {
+      const r = route({ query: { name: 'string' }, handler: async () => ({}) });
+      assert.strictEqual(isRoute(r), true);
     });
   });
 
-  describe('ExtractPathParams', () => {
+  describe('CollectPathParams', () => {
     it('extracts single path parameter type', () => {
-      // Compile-time test: create a route with path param and verify type
-      const getUser = route({
-        method: 'get',
-        path: '/users/:id',
-        handler: (c) => {
-          // TypeScript should know c.path.id is string
-          const id: string = c.path.id;
-          return Response.json({ id });
-        },
+      // With the new API, path params come from $param property names.
+      const api = router({
+        users: router({
+          $id: router({
+            get: async (c) => {
+              const id: string = c.path.id;
+              return Response.json({ id });
+            },
+          }),
+        }),
       });
 
-      // Runtime check that route was created
-      assert.strictEqual(getUser.path, '/users/:id');
+      // Runtime check that router was created.
+      assert.ok(api.routes.users);
     });
 
     it('extracts multiple path parameters type', () => {
-      // Compile-time test: create a route with multiple path params
-      const getPost = route({
-        method: 'get',
-        path: '/users/:userId/posts/:postId',
-        handler: (c) => {
-          // TypeScript should know both params exist
-          const userId: string = c.path.userId;
-          const postId: string = c.path.postId;
-          return Response.json({ userId, postId });
-        },
+      // With nested $param routers.
+      const api = router({
+        users: router({
+          $userId: router({
+            posts: router({
+              $postId: router({
+                get: async (c) => {
+                  const userId: string = c.path.userId;
+                  const postId: string = c.path.postId;
+                  return Response.json({ userId, postId });
+                },
+              }),
+            }),
+          }),
+        }),
       });
 
-      assert.strictEqual(getPost.path, '/users/:userId/posts/:postId');
+      assert.ok(api.routes.users);
     });
 
     it('handles routes without path parameters', () => {
-      const listUsers = route({
-        method: 'get',
-        path: '/users',
-        handler: (c) => {
-          // c.path should be Record<string, never> (empty)
-          // This is a compile-time check - at runtime we just verify the route
-          return Response.json({ path: c.path });
-        },
+      const api = router({
+        users: router({
+          get: async (c) => {
+            return Response.json({ path: c.path });
+          },
+        }),
       });
 
-      assert.strictEqual(listUsers.path, '/users');
+      assert.ok(api.routes.users);
     });
 
     it('verifies type inference at compile time', () => {
-      // This is primarily a compile-time test that verifies ExtractPathParams works
-      type SingleParam = ExtractPathParams<'/users/:id'>;
-      type MultiParam = ExtractPathParams<'/users/:userId/posts/:postId'>;
-      type NoParams = ExtractPathParams<'/users'>;
+      // With the new design, path params are collected from $param property names.
+      type SingleParam = CollectPathParams<['$id']>;
+      type MultiParam = CollectPathParams<['$userId', 'posts', '$postId']>;
+      type NoParams = CollectPathParams<['users']>;
 
-      // These type assertions will fail to compile if types are wrong
+      // These type assertions will fail to compile if types are wrong.
       const _single: SingleParam = { id: 'test' };
       const _multi: MultiParam = { userId: 'u1', postId: 'p1' };
       const _none: NoParams = {};
 
-      // Runtime assertion to satisfy test runner
+      // Runtime assertion to satisfy test runner.
       assert.ok(true);
     });
   });

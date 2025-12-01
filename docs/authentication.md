@@ -39,38 +39,35 @@ import { jwtAuth, jwtSign } from 'typed-routes/middleware';
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 
-const api = router('/api', {
-  // Public: login endpoint sets the cookie
-  login: route({
-    method: 'post',
-    path: '/login',
-    body: { email: 'string', password: 'string' },
-    handler: async (c) => {
-      const user = await db.findUser(c.body.email, c.body.password);
-      if (!user) {
-        return new Response('Invalid credentials', { status: 401 });
-      }
+// Public routes (no auth middleware)
+const publicRoutes = router({
+  login: router({
+    post: route({
+      body: { email: 'string', password: 'string' },
+      handler: async (c) => {
+        const user = await db.findUser(c.body.email, c.body.password);
+        if (!user) {
+          return new Response('Invalid credentials', { status: 401 });
+        }
 
-      const token = await jwtSign(
-        { email: user.email },
-        JWT_SECRET,
-        { expiresIn: '7d', subject: user.id }
-      );
+        const token = await jwtSign(
+          { email: user.email },
+          JWT_SECRET,
+          { expiresIn: '7d', subject: user.id }
+        );
 
-      return new Response(JSON.stringify({ success: true }), {
-        headers: {
-          'Content-Type': 'application/json',
-          'Set-Cookie': `token=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${7 * 24 * 60 * 60}`,
-        },
-      });
-    },
+        return new Response(JSON.stringify({ success: true }), {
+          headers: {
+            'Content-Type': 'application/json',
+            'Set-Cookie': `token=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${7 * 24 * 60 * 60}`,
+          },
+        });
+      },
+    }),
   }),
 
-  // Public: logout clears the cookie
-  logout: route({
-    method: 'post',
-    path: '/logout',
-    handler: async () => {
+  logout: router({
+    post: async () => {
       return new Response(JSON.stringify({ success: true }), {
         headers: {
           'Content-Type': 'application/json',
@@ -79,14 +76,16 @@ const api = router('/api', {
       });
     },
   }),
+});
 
-  // Protected: requires valid JWT from cookie or Authorization header
-  profile: route.ctx<{ user: { id: string; email: string } }>()({
-    method: 'get',
-    path: '/profile',
-    handler: async (c) => ({
-      id: c.user.id,
-      email: c.user.email,
+// Protected routes (with auth middleware)
+const protectedRoutes = router({
+  profile: router({
+    get: route.ctx<{ user: { id: string; email: string } }>()({
+      handler: async (c) => ({
+        id: c.user.id,
+        email: c.user.email,
+      }),
     }),
   }),
 },
@@ -97,31 +96,38 @@ const api = router('/api', {
     }),
   })
 );
+
+// Combine into API
+const api = router({
+  auth: publicRoutes,
+  api: protectedRoutes,
+});
+
+export default { fetch: api.handler() };
 ```
 
 ### Client
 
 ```typescript
 import { createHttpClient } from 'typed-routes';
-import { api } from './server.js';
+import type { api } from './server.js';
 
-const client = createHttpClient(api);
-client.configure({
+const client = createHttpClient<typeof api>({
   baseUrl: 'https://api.example.com',
   credentials: 'include',  // Send cookies with every request
 });
 
 // Login - server sets httpOnly cookie
-await client.login({
+await client.auth.login.post({
   body: { email: 'alice@example.com', password: 'secret' },
 });
 
 // All subsequent requests automatically include the cookie
-const profile = await client.profile({});
+const profile = await client.api.profile();
 console.log(profile.email);
 
 // Logout - server clears the cookie
-await client.logout({});
+await client.auth.logout.post();
 ```
 
 ### Cookie Options
@@ -145,25 +151,25 @@ For SPAs, mobile apps, or cross-origin requests where cookies don't work well.
 Same as cookie-based, but return the token in the response body instead of a cookie:
 
 ```typescript
-login: route({
-  method: 'post',
-  path: '/login',
-  body: { email: 'string', password: 'string' },
-  handler: async (c) => {
-    const user = await db.findUser(c.body.email, c.body.password);
-    if (!user) {
-      return new Response('Invalid credentials', { status: 401 });
-    }
+login: router({
+  post: route({
+    body: { email: 'string', password: 'string' },
+    handler: async (c) => {
+      const user = await db.findUser(c.body.email, c.body.password);
+      if (!user) {
+        return new Response('Invalid credentials', { status: 401 });
+      }
 
-    const token = await jwtSign(
-      { email: user.email },
-      JWT_SECRET,
-      { expiresIn: '1h', subject: user.id }
-    );
+      const token = await jwtSign(
+        { email: user.email },
+        JWT_SECRET,
+        { expiresIn: '1h', subject: user.id }
+      );
 
-    return { token };
-  },
-}),
+      return { token };
+    },
+  }),
+})
 ```
 
 ### Client
@@ -172,13 +178,12 @@ Use dynamic headers to include the token:
 
 ```typescript
 import { createHttpClient } from 'typed-routes';
-import { api } from './server.js';
+import type { api } from './server.js';
 
 // Token storage (use your state management in practice)
 let token: string | null = null;
 
-const client = createHttpClient(api);
-client.configure({
+const client = createHttpClient<typeof api>({
   baseUrl: 'https://api.example.com',
   headers: {
     // Dynamic header - called on each request
@@ -187,13 +192,13 @@ client.configure({
 });
 
 // Login - store token in memory
-const result = await client.login({
+const result = await client.auth.login.post({
   body: { email: 'alice@example.com', password: 'secret' },
 });
 token = result.token;
 
 // Subsequent requests include the Authorization header
-const profile = await client.profile({});
+const profile = await client.api.profile();
 ```
 
 ---
@@ -218,7 +223,7 @@ function getTokenExp(jwt: string): number {
   return payload.exp * 1000;
 }
 
-client.configure({
+const client = createHttpClient<typeof api>({
   baseUrl: 'https://api.example.com',
   headers: {
     'Authorization': async () => {
@@ -226,7 +231,7 @@ client.configure({
 
       // Refresh if token expires in < 5 minutes
       if (tokenExp - Date.now() < 5 * 60 * 1000) {
-        const result = await client.refresh({});
+        const result = await client.api.refresh.post();
         token = result.token;
         tokenExp = getTokenExp(token);
       }
@@ -240,19 +245,19 @@ client.configure({
 ### Server-Side Refresh Endpoint
 
 ```typescript
-refresh: route.ctx<{ user: { id: string; email: string } }>()({
-  method: 'post',
-  path: '/refresh',
-  handler: async (c) => {
-    // Issue a new token with fresh expiry
-    const token = await jwtSign(
-      { email: c.user.email },
-      JWT_SECRET,
-      { expiresIn: '1h', subject: c.user.id }
-    );
-    return { token };
-  },
-}),
+refresh: router({
+  post: route.ctx<{ user: { id: string; email: string } }>()({
+    handler: async (c) => {
+      // Issue a new token with fresh expiry
+      const token = await jwtSign(
+        { email: c.user.email },
+        JWT_SECRET,
+        { expiresIn: '1h', subject: c.user.id }
+      );
+      return { token };
+    },
+  }),
+})
 ```
 
 ---
