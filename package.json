@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "Type-safe route definitions with auto-generated clients and OpenAPI docs",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {
