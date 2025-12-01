@@ -28,6 +28,16 @@ export const ROUTE_MARKER = Symbol.for('typed-routes:route');
 export const ROUTER_MARKER = Symbol.for('typed-routes:router');
 
 /**
+ * Brand symbol for Router type identification across module boundaries.
+ * This enables TypeScript to recognize Router types even when generic
+ * type information is lost during cross-package imports.
+ */
+declare const ROUTER_BRAND: unique symbol;
+
+/** Brand type for Router identification in conditional types. */
+export type RouterBrand = { readonly [ROUTER_BRAND]: true };
+
+/**
  * Extracts the parameter name from a `$param` property name.
  */
 export type ExtractParamFromProperty<T extends string> =
@@ -197,7 +207,7 @@ export type FetchHandler = (
  * });
  * ```
  */
-export interface Router<T extends RouterRoutes> {
+export interface Router<T extends RouterRoutes> extends RouterBrand {
   /** Route definitions and nested routers. */
   readonly routes: T;
   /** Middleware applied to all routes in this router. */

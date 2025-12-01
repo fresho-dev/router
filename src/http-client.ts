@@ -26,7 +26,7 @@
  * ```
  */
 
-import type { Router, RouterRoutes, RouteDefinition, Method } from './types.js';
+import type { Router, RouterRoutes, RouteDefinition, Method, RouterBrand } from './types.js';
 import type { SchemaDefinition, InferSchema } from './schema.js';
 
 // =============================================================================
@@ -94,9 +94,12 @@ type RouterClient<T extends RouterRoutes, Path extends string[] = []> = {
       : never;
 } & {
   // Nested routers become nested clients.
+  // Uses RouterBrand check first to handle cross-module type inference.
   [K in keyof T as K extends HttpMethods ? never : K]:
-    T[K] extends Router<infer Routes>
-      ? RouterClient<Routes, [...Path, K & string]> & ((options?: HttpRequestOptions) => Promise<unknown>)
+    T[K] extends RouterBrand
+      ? T[K] extends Router<infer Routes>
+        ? RouterClient<Routes, [...Path, K & string]> & ((options?: HttpRequestOptions) => Promise<unknown>)
+        : never
       : never;
 } & {
   // Direct call = implicit GET.

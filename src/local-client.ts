@@ -19,7 +19,7 @@
  * ```
  */
 
-import type { Router, RouterRoutes, RouteDefinition, Method, ExecutionContext } from './types.js';
+import type { Router, RouterRoutes, RouteDefinition, Method, ExecutionContext, RouterBrand } from './types.js';
 import type { SchemaDefinition, InferSchema } from './schema.js';
 import { isRouter, isRoute, isFunction, HTTP_METHODS } from './types.js';
 import { compileSchema } from './schema.js';
@@ -76,9 +76,12 @@ type RouterClient<T extends RouterRoutes, Path extends string[] = []> = {
       ? MethodClient<T[K], HasParams<Path>>
       : never;
 } & {
+  // Uses RouterBrand check first to handle cross-module type inference.
   [K in keyof T as K extends HttpMethods ? never : K]:
-    T[K] extends Router<infer Routes>
-      ? RouterClient<Routes, [...Path, K & string]> & ((options?: LocalRequestOptions) => Promise<unknown>)
+    T[K] extends RouterBrand
+      ? T[K] extends Router<infer Routes>
+        ? RouterClient<Routes, [...Path, K & string]> & ((options?: LocalRequestOptions) => Promise<unknown>)
+        : never
       : never;
 } & {
   (options?: LocalRequestOptions): Promise<unknown>;

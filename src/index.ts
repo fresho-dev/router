@@ -92,6 +92,7 @@ export {
   type MethodEntry,
   type RouterRoutes,
   type Router,
+  type RouterBrand,
   type FetchHandler,
   isRouter,
   isRoute,
