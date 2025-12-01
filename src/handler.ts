@@ -78,8 +78,15 @@ function compileRoutes(
   const compiled: CompiledRoute[] = [];
 
   for (const [prop, entry] of Object.entries(routerDef.routes)) {
-    // Check if this is a method handler (get, post, etc.)
-    if (HTTP_METHODS.has(prop)) {
+    // Check if entry is a nested router first (takes precedence over method name check).
+    // This allows path segments named 'get', 'post', etc. when they contain routers.
+    if (isRouter(entry)) {
+      // Nested router - recurse with updated path.
+      const segment = propertyToSegment(prop);
+      const newPath = parentPath ? `${parentPath}/${segment}` : `/${segment}`;
+      compiled.push(...compileRoutes(entry, newPath, currentMiddleware));
+    } else if (HTTP_METHODS.has(prop)) {
+      // Method handler (get, post, etc.) - only when entry is a route or function.
       const method = prop.toUpperCase();
       const path = parentPath || '/';
       const { pattern, paramNames } = pathToRegex(path);
@@ -106,11 +113,6 @@ function compileRoutes(
           bodySchema: routeDef.body ? compileSchema(routeDef.body) : undefined,
         });
       }
-    } else if (isRouter(entry)) {
-      // Nested router - recurse with updated path.
-      const segment = propertyToSegment(prop);
-      const newPath = parentPath ? `${parentPath}/${segment}` : `/${segment}`;
-      compiled.push(...compileRoutes(entry, newPath, currentMiddleware));
     }
   }
 
