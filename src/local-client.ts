@@ -274,7 +274,7 @@ async function invokeHandler(
   // Validate body.
   let body: unknown = {};
   if (routeInfo.bodySchema) {
-    const result = routeInfo.bodySchema.safeParse(options?.body ?? {});
+    const result = routeInfo.bodySchema.safeParse((options?.body ?? {}) as object);
     if (!result.success) {
       throw new Error(`Invalid request body: ${JSON.stringify(result.error.flatten())}`);
     }

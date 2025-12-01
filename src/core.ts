@@ -191,7 +191,7 @@ export function router<T extends RouterRoutes, M extends Middleware<any>[]>(
     handler() {
       return createHandler(self);
     },
-  } as Router<T>;
+  } as unknown as Router<T>;
   // Add marker for runtime type checking.
   (self as unknown as Record<symbol, boolean>)[ROUTER_MARKER] = true;
   return self;

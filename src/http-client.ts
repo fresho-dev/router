@@ -85,21 +85,25 @@ type HasParams<Path extends string[]> =
     ? Head extends `$${string}` ? true : HasParams<Rest>
     : false;
 
+/** Extract the MethodEntry part from a union type. */
+type ExtractMethod<T> = Extract<T, RouteDefinition | ((...args: unknown[]) => unknown)>;
+
 /** Client type for a router. */
 type RouterClient<T extends RouterRoutes, Path extends string[] = []> = {
   // Method handlers become callable methods.
+  // Uses Extract to filter MethodEntry from the union (due to index signature).
   [K in keyof T as K extends HttpMethods ? K : never]:
-    T[K] extends RouteDefinition | ((...args: unknown[]) => unknown)
-      ? MethodClient<T[K], HasParams<Path>>
+    ExtractMethod<T[K]> extends infer M
+      ? M extends RouteDefinition | ((...args: unknown[]) => unknown)
+        ? MethodClient<M, HasParams<Path>>
+        : never
       : never;
 } & {
   // Nested routers become nested clients.
-  // Uses RouterBrand check first to handle cross-module type inference.
+  // Uses Extract to filter Router from MethodEntry union, then structural check for routes.
   [K in keyof T as K extends HttpMethods ? never : K]:
-    T[K] extends RouterBrand
-      ? T[K] extends Router<infer Routes>
-        ? RouterClient<Routes, [...Path, K & string]> & ((options?: HttpRequestOptions) => Promise<unknown>)
-        : never
+    Extract<T[K], { routes: RouterRoutes }> extends { routes: infer Routes extends RouterRoutes }
+      ? RouterClient<Routes, [...Path, K & string]> & ((options?: HttpRequestOptions) => Promise<unknown>)
       : never;
 } & {
   // Direct call = implicit GET.
