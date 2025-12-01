@@ -3,10 +3,13 @@
  *
  * Provides a typed HTTP client using type-only imports.
  * URLs are built from property access chains:
- * - Property names = path segments
+ * - Property names = path segments (including `get`, `post`, etc.)
  * - `$param` = dynamic segment (substituted from path options)
- * - `get()`, `post()`, etc. = HTTP methods
- * - Direct call = implicit GET
+ * - `$get()`, `$post()`, etc. = HTTP method execution
+ * - Direct call `()` = implicit GET
+ *
+ * The `$` prefix distinguishes HTTP method execution from path navigation,
+ * allowing routes with path segments named after HTTP methods (e.g., `/api/get`).
  *
  * @example
  * ```typescript
@@ -19,10 +22,14 @@
  * });
  *
  * // URLs from property chains:
- * await client.health();                           // GET /health
- * await client.users();                            // GET /users
- * await client.users.post({ body: {...} });        // POST /users
- * await client.users.$id({ path: { id: '123' } }); // GET /users/123
+ * await client.health();                            // GET /health (implicit)
+ * await client.users.$get();                        // GET /users (explicit)
+ * await client.users.$post({ body: {...} });        // POST /users
+ * await client.users.$id({ path: { id: '123' } });  // GET /users/123
+ *
+ * // Navigate to path segments named after HTTP methods:
+ * await client.api.get.$get();                      // GET /api/get
+ * await client.resources.delete.$get();             // GET /resources/delete
  * ```
  */
 
@@ -57,8 +64,19 @@ export interface HttpRequestOptions {
 // Client Type Construction
 // =============================================================================
 
-/** HTTP methods available on route clients. */
-type HttpMethods = 'get' | 'post' | 'put' | 'patch' | 'delete';
+/** HTTP method names as defined in routes (lowercase). */
+type LowercaseMethods = 'get' | 'post' | 'put' | 'patch' | 'delete';
+
+/** HTTP methods available on clients (prefixed with $ for explicit execution). */
+type HttpMethods = '$get' | '$post' | '$put' | '$patch' | '$delete';
+
+/** Map lowercase method to $-prefixed version. */
+type PrefixedMethod<T extends LowercaseMethods> =
+  T extends 'get' ? '$get' :
+  T extends 'post' ? '$post' :
+  T extends 'put' ? '$put' :
+  T extends 'patch' ? '$patch' :
+  T extends 'delete' ? '$delete' : never;
 
 /** Extract return type from a handler. */
 type ExtractReturn<T> = T extends (...args: unknown[]) => infer R
@@ -92,9 +110,8 @@ type ExtractMethod<T> = Extract<T, RouteDefinition<any, any, any, any, any> | ((
 
 /** Client type for a router. */
 type RouterClient<T extends RouterRoutes, Path extends string[] = []> = {
-  // Method handlers become callable methods.
-  // Uses Extract to filter MethodEntry from the union (due to index signature).
-  [K in keyof T as K extends HttpMethods ? K : never]:
+  // Method handlers become $-prefixed callable methods ($get, $post, etc.).
+  [K in keyof T as K extends LowercaseMethods ? PrefixedMethod<K> : never]:
     ExtractMethod<T[K]> extends infer M
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ? M extends RouteDefinition<any, any, any, any, any> | ((...args: unknown[]) => unknown)
@@ -102,9 +119,8 @@ type RouterClient<T extends RouterRoutes, Path extends string[] = []> = {
         : never
       : never;
 } & {
-  // Nested routers become nested clients.
-  // Uses Extract to filter Router from MethodEntry union, then structural check for routes.
-  [K in keyof T as K extends HttpMethods ? never : K]:
+  // ALL keys (including lowercase method names) become navigation paths.
+  [K in keyof T]:
     Extract<T[K], { routes: RouterRoutes }> extends { routes: infer Routes extends RouterRoutes }
       ? RouterClient<Routes, [...Path, K & string]> & ImplicitGetCall<Routes, [...Path, K & string]>
       : never;
@@ -139,10 +155,15 @@ interface SharedConfig {
 }
 
 const BODY_METHODS = new Set(['post', 'put', 'patch']);
-const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'options', 'head']);
+const HTTP_METHODS = new Set(['$get', '$post', '$put', '$patch', '$delete', '$options', '$head']);
 
 /**
  * Creates a typed HTTP client.
+ *
+ * HTTP methods are prefixed with `$` to distinguish them from path segments:
+ * - `.$get()`, `.$post()`, `.$put()`, `.$patch()`, `.$delete()` - execute HTTP methods
+ * - `.propertyName` - navigate to path segment (works for any name including `get`, `post`, etc.)
+ * - Direct call `()` - implicit GET request
  *
  * @example
  * ```typescript
@@ -154,17 +175,21 @@ const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'options'
  *   headers: { Authorization: () => `Bearer ${getToken()}` },
  * });
  *
- * // GET /health
+ * // GET /health (implicit)
  * await client.health();
  *
- * // GET /users
- * await client.users();
+ * // GET /users (explicit)
+ * await client.users.$get();
  *
  * // POST /users
- * await client.users.post({ body: { name: 'Alice' } });
+ * await client.users.$post({ body: { name: 'Alice' } });
  *
  * // GET /users/123
  * await client.users.$id({ path: { id: '123' } });
+ *
+ * // Navigate through path segments named after HTTP methods:
+ * // GET /api/get
+ * await client.api.get.$get();
  * ```
  */
 export function createHttpClient<T extends Router<RouterRoutes>>(
@@ -203,10 +228,11 @@ function createPathProxy(sharedConfig: SharedConfig, segments: string[]): unknow
     get(_target, prop) {
       if (typeof prop !== 'string') return undefined;
 
-      // HTTP method = execute request.
+      // $-prefixed method = execute request (strip the $ prefix).
       if (HTTP_METHODS.has(prop)) {
+        const method = prop.slice(1) as Method; // Remove $ prefix
         return (options?: HttpRequestOptions) => {
-          return executeRequest(sharedConfig, segments, prop as Method, options);
+          return executeRequest(sharedConfig, segments, method, options);
         };
       }
 

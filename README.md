@@ -242,16 +242,34 @@ const client = createHttpClient<typeof api>({
 	baseUrl: "https://api.example.com",
 });
 
-// Direct call for GET routes
+// Direct call for implicit GET
 const users = await client.users({ query: { limit: 10 } });
 
 // Path params
 const user = await client.users.$id({ path: { id: "123" } });
 // user is typed as { id: string, name: string }
 
-// Explicit methods for non-GET
-await client.users.post({ body: { name: "Bob" } });
+// Explicit HTTP methods use $-prefix
+await client.users.$get();                    // GET /users
+await client.users.$post({ body: { name: "Bob" } }); // POST /users
 ```
+
+### HTTP Method Syntax
+
+HTTP methods are prefixed with `$` to distinguish them from path navigation:
+
+```typescript
+// $-prefixed = execute HTTP method
+client.users.$get();     // GET /users
+client.users.$post({});  // POST /users
+client.users.$put({});   // PUT /users
+client.users.$delete();  // DELETE /users
+
+// No prefix = navigate to path segment
+client.api.get.$get();   // GET /api/get (navigate to "get", then execute GET)
+```
+
+This allows routes with path segments named after HTTP methods (e.g., `/api/get`, `/resources/delete`).
 
 ## Local Client
 

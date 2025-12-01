@@ -274,7 +274,7 @@ describe('http-client', () => {
 
         const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
 
-        await client.test.post({ body: { name: 'alice' } });
+        await client.test.$post({ body: { name: 'alice' } });
 
         const init = fetchMock.mock.calls[0].arguments[1] as RequestInit;
         const headers = new Headers(init.headers);
@@ -288,7 +288,7 @@ describe('http-client', () => {
 
         const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
 
-        await client.test.post({ body: { name: 'alice' } });
+        await client.test.$post({ body: { name: 'alice' } });
 
         const init = fetchMock.mock.calls[0].arguments[1] as RequestInit;
         assert.strictEqual(init.body, JSON.stringify({ name: 'alice' }));
@@ -313,27 +313,53 @@ describe('http-client', () => {
         await assert.rejects(async () => client.test(), /Not Found/);
       });
 
-      it('uses correct HTTP method via .get(), .post(), etc.', async (t) => {
+      it('uses correct HTTP method via .$get(), .$post(), etc.', async (t) => {
         const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
           new Response(JSON.stringify({}))
         );
 
         const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
 
-        await client.test.get();
+        await client.test.$get();
         assert.strictEqual((fetchMock.mock.calls[0].arguments[1] as RequestInit).method, 'GET');
 
-        await client.test.post({ body: {} });
+        await client.test.$post({ body: {} });
         assert.strictEqual((fetchMock.mock.calls[1].arguments[1] as RequestInit).method, 'POST');
 
-        await client.test.put({ body: {} });
+        await client.test.$put({ body: {} });
         assert.strictEqual((fetchMock.mock.calls[2].arguments[1] as RequestInit).method, 'PUT');
 
-        await client.test.patch({ body: {} });
+        await client.test.$patch({ body: {} });
         assert.strictEqual((fetchMock.mock.calls[3].arguments[1] as RequestInit).method, 'PATCH');
 
-        await client.test.delete();
+        await client.test.$delete();
         assert.strictEqual((fetchMock.mock.calls[4].arguments[1] as RequestInit).method, 'DELETE');
+      });
+
+      it('lowercase method names navigate to path segments', async (t) => {
+        const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
+          new Response(JSON.stringify({}))
+        );
+
+        // Route structure: GET /resources/get, GET /resources/delete
+        const api = router({
+          resources: router({
+            get: router({ get: async () => ({ action: 'get' }) }),
+            delete: router({ get: async () => ({ action: 'delete' }) }),
+          }),
+        });
+
+        const client = createHttpClient<typeof api>({ baseUrl: 'http://test.com' });
+
+        // Navigate to /resources/get and execute GET.
+        await client.resources.get.$get();
+        assert.strictEqual(fetchMock.mock.calls[0].arguments[0], 'http://test.com/resources/get');
+        assert.strictEqual((fetchMock.mock.calls[0].arguments[1] as RequestInit).method, 'GET');
+
+        // Navigate to /resources/delete and execute GET.
+        await client.resources.delete.$get();
+        assert.strictEqual(fetchMock.mock.calls[1].arguments[0], 'http://test.com/resources/delete');
+        assert.strictEqual((fetchMock.mock.calls[1].arguments[1] as RequestInit).method, 'GET');
       });
 
       it('direct call uses GET method', async (t) => {

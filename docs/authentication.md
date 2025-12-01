@@ -118,7 +118,7 @@ const client = createHttpClient<typeof api>({
 });
 
 // Login - server sets httpOnly cookie
-await client.auth.login.post({
+await client.auth.login.$post({
   body: { email: 'alice@example.com', password: 'secret' },
 });
 
@@ -127,7 +127,7 @@ const profile = await client.api.profile();
 console.log(profile.email);
 
 // Logout - server clears the cookie
-await client.auth.logout.post();
+await client.auth.logout.$post();
 ```
 
 ### Cookie Options
@@ -192,7 +192,7 @@ const client = createHttpClient<typeof api>({
 });
 
 // Login - store token in memory
-const result = await client.auth.login.post({
+const result = await client.auth.login.$post({
   body: { email: 'alice@example.com', password: 'secret' },
 });
 token = result.token;
@@ -231,7 +231,7 @@ const client = createHttpClient<typeof api>({
 
       // Refresh if token expires in < 5 minutes
       if (tokenExp - Date.now() < 5 * 60 * 1000) {
-        const result = await client.api.refresh.post();
+        const result = await client.api.refresh.$post();
         token = result.token;
         tokenExp = getTokenExp(token);
       }

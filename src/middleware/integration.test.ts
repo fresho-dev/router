@@ -745,7 +745,7 @@ describe('Middleware Integration', () => {
           assert.strictEqual(typed.role, 'admin');
           assert.strictEqual(typed.include, 'settings');
 
-          const updated = await client.updateProfile.post({
+          const updated = await client.updateProfile.$post({
             body: { displayName: 'Alice Smith' },
           });
           const typedUpdate = updated as { id: string; displayName: string; updatedBy: string };
