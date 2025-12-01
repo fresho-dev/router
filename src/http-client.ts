@@ -26,8 +26,8 @@
  * ```
  */
 
-import type { Router, RouterRoutes, RouteDefinition, Method, RouterBrand } from './types.js';
-import type { SchemaDefinition, InferSchema } from './schema.js';
+import type { Router, RouterRoutes, RouteDefinition, Method } from './types.js';
+import type { InferSchema } from './schema.js';
 
 // =============================================================================
 // Configuration Types
@@ -72,8 +72,9 @@ type BuildOptions<HasPathParams extends boolean, Q, B> =
     : (keyof Q extends never ? {} : { query?: Q }) & (keyof B extends never ? {} : { body: B }) & { headers?: HeadersInit };
 
 /** Client type for a method entry (route or bare function). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MethodClient<T, HasPathParams extends boolean = false> =
-  T extends RouteDefinition<infer Q, infer B, infer R>
+  T extends RouteDefinition<infer Q, infer B, infer R, any, any>
     ? (options?: BuildOptions<HasPathParams, InferSchema<Q>, InferSchema<B>>) => Promise<R>
     : T extends (...args: unknown[]) => unknown
       ? (options?: BuildOptions<HasPathParams, {}, {}>) => Promise<ExtractReturn<T>>
@@ -86,7 +87,8 @@ type HasParams<Path extends string[]> =
     : false;
 
 /** Extract the MethodEntry part from a union type. */
-type ExtractMethod<T> = Extract<T, RouteDefinition | ((...args: unknown[]) => unknown)>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ExtractMethod<T> = Extract<T, RouteDefinition<any, any, any, any, any> | ((...args: unknown[]) => unknown)>;
 
 /** Client type for a router. */
 type RouterClient<T extends RouterRoutes, Path extends string[] = []> = {
@@ -94,7 +96,8 @@ type RouterClient<T extends RouterRoutes, Path extends string[] = []> = {
   // Uses Extract to filter MethodEntry from the union (due to index signature).
   [K in keyof T as K extends HttpMethods ? K : never]:
     ExtractMethod<T[K]> extends infer M
-      ? M extends RouteDefinition | ((...args: unknown[]) => unknown)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ? M extends RouteDefinition<any, any, any, any, any> | ((...args: unknown[]) => unknown)
         ? MethodClient<M, HasParams<Path>>
         : never
       : never;
@@ -103,12 +106,24 @@ type RouterClient<T extends RouterRoutes, Path extends string[] = []> = {
   // Uses Extract to filter Router from MethodEntry union, then structural check for routes.
   [K in keyof T as K extends HttpMethods ? never : K]:
     Extract<T[K], { routes: RouterRoutes }> extends { routes: infer Routes extends RouterRoutes }
-      ? RouterClient<Routes, [...Path, K & string]> & ((options?: HttpRequestOptions) => Promise<unknown>)
+      ? RouterClient<Routes, [...Path, K & string]> & ImplicitGetCall<Routes, [...Path, K & string]>
       : never;
-} & {
-  // Direct call = implicit GET.
-  (options?: HttpRequestOptions): Promise<unknown>;
-};
+} & ImplicitGetCall<T, Path>;
+
+/** Helper to extract return type for implicit GET calls. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ImplicitGetCall<T extends RouterRoutes, Path extends string[] = []> =
+  'get' extends keyof T
+    ? ExtractMethod<T['get']> extends RouteDefinition<infer _Q, infer _B, infer R, any, any>
+      ? HasParams<Path> extends true
+        ? (options: { path: Record<string, string> } & { query?: Record<string, unknown> } & { headers?: HeadersInit }) => Promise<R>
+        : (options?: HttpRequestOptions) => Promise<R>
+      : ExtractMethod<T['get']> extends (...args: unknown[]) => unknown
+        ? HasParams<Path> extends true
+          ? (options: { path: Record<string, string> } & { query?: Record<string, unknown> } & { headers?: HeadersInit }) => Promise<ExtractReturn<ExtractMethod<T['get']>>>
+          : (options?: HttpRequestOptions) => Promise<ExtractReturn<ExtractMethod<T['get']>>>
+        : (options?: HttpRequestOptions) => Promise<unknown>
+    : (options?: HttpRequestOptions) => Promise<unknown>;
 
 /** Top-level HTTP client type. */
 export type HttpClient<T extends Router<RouterRoutes>> = {

@@ -135,11 +135,20 @@ describe('schema', () => {
       }
     });
 
-    it('throws for unknown type', () => {
+    it('throws for invalid type', () => {
       assert.throws(
-        () => compileSchema({ field: 'unknown' as 'string' }),
+        () => compileSchema({ field: 'invalid_type' as 'string' }),
         /Unknown type/
       );
+    });
+
+    it('validates unknown type', () => {
+      const schema = compileSchema({ data: 'unknown' });
+      const result = schema.safeParse({ data: { nested: true, value: 123 } });
+      assert.strictEqual(result.success, true);
+      if (result.success) {
+        assert.deepStrictEqual(result.data.data, { nested: true, value: 123 });
+      }
     });
 
     it('compiles empty schema', () => {

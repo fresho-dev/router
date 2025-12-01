@@ -36,16 +36,16 @@
  */
 
 /** Primitive type strings. */
-export type PrimitiveType = 'string' | 'number' | 'boolean';
+export type PrimitiveType = 'string' | 'number' | 'boolean' | 'unknown';
 
 /** Optional primitive type strings. */
-export type OptionalPrimitiveType = 'string?' | 'number?' | 'boolean?';
+export type OptionalPrimitiveType = 'string?' | 'number?' | 'boolean?' | 'unknown?';
 
 /** Array type strings. */
-export type ArrayType = 'string[]' | 'number[]' | 'boolean[]';
+export type ArrayType = 'string[]' | 'number[]' | 'boolean[]' | 'unknown[]';
 
 /** Optional array type strings. */
-export type OptionalArrayType = 'string[]?' | 'number[]?' | 'boolean[]?';
+export type OptionalArrayType = 'string[]?' | 'number[]?' | 'boolean[]?' | 'unknown[]?';
 
 /** All supported type strings. */
 export type SchemaType = PrimitiveType | OptionalPrimitiveType | ArrayType | OptionalArrayType;
@@ -63,12 +63,16 @@ export type SchemaTypeMap = {
   'number?': number | undefined;
   boolean: boolean;
   'boolean?': boolean | undefined;
+  unknown: unknown;
+  'unknown?': unknown | undefined;
   'string[]': string[];
   'string[]?': string[] | undefined;
   'number[]': number[];
   'number[]?': number[] | undefined;
   'boolean[]': boolean[];
   'boolean[]?': boolean[] | undefined;
+  'unknown[]': unknown[];
+  'unknown[]?': unknown[] | undefined;
 };
 
 /** Checks if a schema field type is optional (ends with ?). */
@@ -120,7 +124,7 @@ export interface CompiledSchema<T> {
 }
 
 /** Valid base types for primitives and arrays. */
-const PRIMITIVE_TYPES = ['string', 'number', 'boolean'];
+const PRIMITIVE_TYPES = ['string', 'number', 'boolean', 'unknown'];
 
 /** Checks if a schema field is a nested object (not a type string). */
 function isNestedSchema(field: SchemaType | SchemaDefinition): field is SchemaDefinition {
@@ -155,6 +159,10 @@ function validatePrimitive(
       }
       return [false, undefined, 'Expected boolean (true/false)'];
     }
+
+    case 'unknown':
+      // Pass through any value without validation.
+      return [true, value, null];
 
     default:
       return [false, undefined, `Unknown type: ${baseType}`];
