@@ -209,6 +209,40 @@ describe('standalone router', () => {
       assert.strictEqual(res.status, 204);
     });
 
+    it('allows HTTP method names as path segments when they contain routers', async () => {
+      // This tests that `get: router(...)` is treated as a path segment, not a method handler.
+      // Regression test for: property names like 'get', 'post', etc. should be path segments
+      // when their value is a router, not a route or function.
+      const handler = createHandler(
+        router({
+          resources: router({
+            get: router({ get: async () => Response.json({ action: 'get resource' }) }),
+            set: router({ get: async () => Response.json({ action: 'set resource' }) }),
+            delete: router({ get: async () => Response.json({ action: 'delete resource' }) }),
+          }),
+        })
+      );
+
+      // GET /resources/get should match the nested GET handler.
+      const res1 = await handler(new Request('http://localhost/resources/get'));
+      assert.strictEqual(res1.status, 200);
+      assert.deepStrictEqual(await res1.json(), { action: 'get resource' });
+
+      // GET /resources/set should match.
+      const res2 = await handler(new Request('http://localhost/resources/set'));
+      assert.strictEqual(res2.status, 200);
+      assert.deepStrictEqual(await res2.json(), { action: 'set resource' });
+
+      // GET /resources/delete should match.
+      const res3 = await handler(new Request('http://localhost/resources/delete'));
+      assert.strictEqual(res3.status, 200);
+      assert.deepStrictEqual(await res3.json(), { action: 'delete resource' });
+
+      // GET /resources should return 404 (no handler at that level).
+      const res4 = await handler(new Request('http://localhost/resources'));
+      assert.strictEqual(res4.status, 404);
+    });
+
     it('uses property names as path segments', async () => {
       const handler = createHandler(
         router({
