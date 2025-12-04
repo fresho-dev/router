@@ -2,6 +2,32 @@
   "name": "typed-routes",
   "version": "0.1.0",
   "description": "Type-safe route definitions with auto-generated clients and OpenAPI docs",
+  "license": "MIT",
+  "author": "fresho.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fresho-dev/typed-routes.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fresho-dev/typed-routes/issues"
+  },
+  "homepage": "https://github.com/fresho-dev/typed-routes#readme",
+  "keywords": [
+    "router",
+    "routing",
+    "typescript",
+    "type-safe",
+    "cloudflare-workers",
+    "deno",
+    "bun",
+    "http",
+    "api",
+    "rest",
+    "middleware",
+    "openapi",
+    "validation",
+    "schema"
+  ],
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -26,6 +52,7 @@
     "typescript": "^5.7.0"
   },
   "files": [
-    "src"
+    "src",
+    "LICENSE"
   ]
 }
