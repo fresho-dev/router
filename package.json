@@ -1,6 +1,9 @@
 {
   "name": "@fresho/router",
-  "version": "0.1.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "version": "0.0.2",
   "description": "Type-safe route definitions with auto-generated clients and OpenAPI docs",
   "license": "MIT",
   "author": "fresho.dev",
@@ -29,11 +32,18 @@
     "schema"
   ],
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
+  "types": "./dist/index.d.mts",
   "exports": {
-    ".": "./dist/index.mjs",
-    "./middleware": "./dist/middleware/index.mjs"
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./middleware": {
+      "types": "./dist/middleware/index.d.mts",
+      "import": "./dist/middleware/index.mjs"
+    }
   },
   "scripts": {
     "build": "tsdown src/index.ts src/middleware/index.ts",
@@ -52,6 +62,7 @@
   },
   "files": [
     "dist",
+    "docs",
     "LICENSE"
   ]
 }
