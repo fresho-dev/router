@@ -3,7 +3,7 @@
   "engines": {
     "node": ">=22"
   },
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Type-safe route definitions with auto-generated clients and OpenAPI docs",
   "license": "MIT",
   "author": "fresho.dev",
