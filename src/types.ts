@@ -12,14 +12,22 @@
  * - Bare functions as shorthand for handlers without schemas
  */
 
-import type { SchemaDefinition, InferSchema } from './schema.js';
 import type { Middleware } from './middleware.js';
+import type { InferSchema, SchemaDefinition } from './schema.js';
 
 /** Standard HTTP methods. */
 export type Method = 'get' | 'post' | 'put' | 'patch' | 'delete' | 'options' | 'head';
 
 /** HTTP method property names. */
-export const HTTP_METHODS = new Set<string>(['get', 'post', 'put', 'patch', 'delete', 'options', 'head']);
+export const HTTP_METHODS = new Set<string>([
+  'get',
+  'post',
+  'put',
+  'patch',
+  'delete',
+  'options',
+  'head',
+]);
 
 /** Symbol to mark an object as a route definition. */
 export const ROUTE_MARKER = Symbol.for('typed-routes:route');
@@ -40,8 +48,9 @@ export type RouterBrand = { readonly [ROUTER_BRAND]: true };
 /**
  * Extracts the parameter name from a `$param` property name.
  */
-export type ExtractParamFromProperty<T extends string> =
-  T extends `$${infer Param}` ? Param : never;
+export type ExtractParamFromProperty<T extends string> = T extends `$${infer Param}`
+  ? Param
+  : never;
 
 /**
  * Checks if a property name is a dynamic parameter (starts with $).
@@ -51,10 +60,12 @@ export type IsParamProperty<T extends string> = T extends `$${string}` ? true : 
 /**
  * Collects path params from a property path array.
  */
-export type CollectPathParams<Path extends string[]> =
-  Path extends [infer Head extends string, ...infer Rest extends string[]]
-    ? (Head extends `$${infer Param}` ? { [K in Param]: string } : {}) & CollectPathParams<Rest>
-    : {};
+export type CollectPathParams<Path extends string[]> = Path extends [
+  infer Head extends string,
+  ...infer Rest extends string[],
+]
+  ? (Head extends `$${infer Param}` ? { [K in Param]: string } : {}) & CollectPathParams<Rest>
+  : {};
 
 /** Execution context for background tasks (Cloudflare Workers compatible). */
 export interface ExecutionContext {
@@ -99,7 +110,9 @@ export type TypedHandler<
   P extends Record<string, string> = Record<string, string>,
   R = unknown,
   Ctx = {},
-> = (context: Context<Q, B, P, Ctx>) => R | Response | TypedResponse<R> | Promise<R | Response | TypedResponse<R>>;
+> = (
+  context: Context<Q, B, P, Ctx>,
+) => R | Response | TypedResponse<R> | Promise<R | Response | TypedResponse<R>>;
 
 /**
  * Route definition - a single HTTP method handler with optional schemas.
@@ -137,7 +150,9 @@ export interface RouteDefinition<
 }
 
 /** A bare handler function (shorthand for route without schemas). */
-export type BareHandler = (context: Context<unknown, unknown, Record<string, string>, unknown>) => unknown;
+export type BareHandler = (
+  context: Context<unknown, unknown, Record<string, string>, unknown>,
+) => unknown;
 
 /** Checks if a value is a function. */
 export function isFunction(value: unknown): value is BareHandler {
@@ -184,7 +199,7 @@ export type RouterRoutes = {
 export type FetchHandler = (
   request: Request,
   env?: unknown,
-  ctx?: ExecutionContext
+  ctx?: ExecutionContext,
 ) => Response | Promise<Response>;
 
 /**

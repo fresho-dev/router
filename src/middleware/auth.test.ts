@@ -2,10 +2,10 @@
  * @fileoverview Tests for authentication middleware.
  */
 
-import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { basicAuth, jwtAuth, jwtSign, jwtVerify, bearerAuth } from './auth.js';
+import { beforeEach, describe, it } from 'node:test';
 import type { MiddlewareContext } from '../middleware.js';
+import { basicAuth, bearerAuth, jwtAuth, jwtSign, jwtVerify } from './auth.js';
 
 describe('Authentication Middleware', () => {
   let context: MiddlewareContext;
@@ -17,7 +17,9 @@ describe('Authentication Middleware', () => {
     nextResponse = new Response('protected content');
     context = {
       request: new Request('http://example.com/test'),
-      path: {}, query: {}, body: {},
+      path: {},
+      query: {},
+      body: {},
       env: {},
     };
   });
@@ -36,7 +38,10 @@ describe('Authentication Middleware', () => {
       const response = await middleware(context, next);
 
       assert.strictEqual(response.status, 401);
-      assert.strictEqual(response.headers.get('WWW-Authenticate'), 'Basic realm="Secure Area", charset="UTF-8"');
+      assert.strictEqual(
+        response.headers.get('WWW-Authenticate'),
+        'Basic realm="Secure Area", charset="UTF-8"',
+      );
       assert.strictEqual(nextCalled, false);
     });
 
@@ -47,7 +52,7 @@ describe('Authentication Middleware', () => {
 
       context.request = new Request('http://example.com/test', {
         headers: {
-          'Authorization': 'Bearer token',
+          Authorization: 'Bearer token',
         },
       });
 
@@ -70,7 +75,7 @@ describe('Authentication Middleware', () => {
       const validCredentials = btoa('admin:secret');
       context.request = new Request('http://example.com/test', {
         headers: {
-          'Authorization': `Basic ${validCredentials}`,
+          Authorization: `Basic ${validCredentials}`,
         },
       });
 
@@ -94,7 +99,7 @@ describe('Authentication Middleware', () => {
       const invalidCredentials = btoa('admin:wrong');
       context.request = new Request('http://example.com/test', {
         headers: {
-          'Authorization': `Basic ${invalidCredentials}`,
+          Authorization: `Basic ${invalidCredentials}`,
         },
       });
 
@@ -112,7 +117,10 @@ describe('Authentication Middleware', () => {
 
       const response = await middleware(context, next);
 
-      assert.strictEqual(response.headers.get('WWW-Authenticate'), 'Basic realm="Admin Area", charset="UTF-8"');
+      assert.strictEqual(
+        response.headers.get('WWW-Authenticate'),
+        'Basic realm="Admin Area", charset="UTF-8"',
+      );
     });
 
     it('should handle malformed credentials', async () => {
@@ -124,7 +132,7 @@ describe('Authentication Middleware', () => {
       const malformedCredentials = btoa('adminpassword');
       context.request = new Request('http://example.com/test', {
         headers: {
-          'Authorization': `Basic ${malformedCredentials}`,
+          Authorization: `Basic ${malformedCredentials}`,
         },
       });
 
@@ -146,7 +154,7 @@ describe('Authentication Middleware', () => {
       const credentials = btoa('user:pass');
       context.request = new Request('http://example.com/test', {
         headers: {
-          'Authorization': `Basic ${credentials}`,
+          Authorization: `Basic ${credentials}`,
         },
       });
 
@@ -158,8 +166,14 @@ describe('Authentication Middleware', () => {
     // Simple JWT creation for testing (HS256)
     async function createTestJwt(payload: any, secret: string): Promise<string> {
       const header = { alg: 'HS256', typ: 'JWT' };
-      const headerB64 = btoa(JSON.stringify(header)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-      const payloadB64 = btoa(JSON.stringify(payload)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+      const headerB64 = btoa(JSON.stringify(header))
+        .replace(/=/g, '')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_');
+      const payloadB64 = btoa(JSON.stringify(payload))
+        .replace(/=/g, '')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_');
 
       const data = `${headerB64}.${payloadB64}`;
       const key = await crypto.subtle.importKey(
@@ -167,7 +181,7 @@ describe('Authentication Middleware', () => {
         new TextEncoder().encode(secret),
         { name: 'HMAC', hash: 'SHA-256' },
         false,
-        ['sign']
+        ['sign'],
       );
 
       const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
@@ -207,7 +221,7 @@ describe('Authentication Middleware', () => {
 
       context.request = new Request('http://example.com/test', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -229,11 +243,11 @@ describe('Authentication Middleware', () => {
 
       context.request = new Request('http://example.com/test', {
         headers: {
-          'Cookie': `token=${token}; other=value`,
+          Cookie: `token=${token}; other=value`,
         },
       });
 
-      const response = await middleware(context, next);
+      const _response = await middleware(context, next);
 
       assert.strictEqual(nextCalled, true);
       assert.strictEqual(context.user, 'user123');
@@ -247,7 +261,7 @@ describe('Authentication Middleware', () => {
 
       context.request = new Request('http://example.com/test', {
         headers: {
-          'Authorization': 'Bearer invalid.token.here',
+          Authorization: 'Bearer invalid.token.here',
         },
       });
 
@@ -269,14 +283,14 @@ describe('Authentication Middleware', () => {
 
       context.request = new Request('http://example.com/test', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
       const response = await middleware(context, next);
 
       assert.strictEqual(response.status, 401);
-      assert(await response.text().then(text => text.includes('expired')));
+      assert(await response.text().then((text) => text.includes('expired')));
       assert.strictEqual(nextCalled, false);
     });
 
@@ -295,14 +309,14 @@ describe('Authentication Middleware', () => {
 
       context.request = new Request('http://example.com/test', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
       const response = await middleware(context, next);
 
       assert.strictEqual(response.status, 401);
-      assert(await response.text().then(text => text.includes('not yet valid')));
+      assert(await response.text().then((text) => text.includes('not yet valid')));
       assert.strictEqual(nextCalled, false);
     });
 
@@ -317,11 +331,11 @@ describe('Authentication Middleware', () => {
 
       context.request = new Request('http://example.com/test', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
-      const response = await middleware(context, next);
+      const _response = await middleware(context, next);
 
       assert.strictEqual(nextCalled, true);
       assert.strictEqual(context.user, 'user123');
@@ -336,7 +350,9 @@ describe('Authentication Middleware', () => {
       // Create context with env
       const envContext: MiddlewareContext<AppContext> = {
         request: new Request('http://example.com/test'),
-        path: {}, query: {}, body: {},
+        path: {},
+        query: {},
+        body: {},
         env: { JWT_SECRET: 'env-secret' },
       };
 
@@ -351,11 +367,11 @@ describe('Authentication Middleware', () => {
 
       envContext.request = new Request('http://example.com/test', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
-      const response = await middleware(envContext, next);
+      const _response = await middleware(envContext, next);
 
       assert.strictEqual(nextCalled, true);
       assert.strictEqual(envContext.user, 'user123');
@@ -376,7 +392,7 @@ describe('Authentication Middleware', () => {
 
       context.request = new Request(`http://example.com/test?token=${token}`);
 
-      const response = await middleware(context, next);
+      const _response = await middleware(context, next);
 
       assert.strictEqual(nextCalled, true);
       assert.strictEqual(context.user, 'user123');
@@ -397,14 +413,18 @@ describe('Authentication Middleware', () => {
         }),
       });
 
-      const payload = { sub: 'user123', email: 'test@example.com', exp: Math.floor(Date.now() / 1000) + 3600 };
+      const payload = {
+        sub: 'user123',
+        email: 'test@example.com',
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
       const token = await createTestJwt(payload, 'test-secret');
 
       const typedContext: MiddlewareContext<AppContext> = {
         ...context,
         request: new Request('http://example.com/test', {
           headers: {
-            'Authorization': `Bearer ${token}`,
+            Authorization: `Bearer ${token}`,
           },
         }),
       };
@@ -432,7 +452,7 @@ describe('Authentication Middleware', () => {
 
       context.request = new Request('http://example.com/test', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -468,7 +488,7 @@ describe('Authentication Middleware', () => {
       // Valid token
       context.request = new Request('http://example.com/test', {
         headers: {
-          'Authorization': 'Bearer valid-token',
+          Authorization: 'Bearer valid-token',
         },
       });
 
@@ -481,7 +501,7 @@ describe('Authentication Middleware', () => {
       nextCalled = false;
       context.request = new Request('http://example.com/test', {
         headers: {
-          'Authorization': 'Bearer invalid-token',
+          Authorization: 'Bearer invalid-token',
         },
       });
 
@@ -501,7 +521,7 @@ describe('Authentication Middleware', () => {
 
       context.request = new Request('http://example.com/test', {
         headers: {
-          'Authorization': 'Bearer test-token',
+          Authorization: 'Bearer test-token',
         },
       });
 
@@ -530,12 +550,12 @@ describe('Authentication Middleware', () => {
       });
 
       context.request = new Request('http://example.com/test', {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       await middleware(context, next);
       assert.strictEqual(nextCalled, true);
-      assert.strictEqual(verifiedPayload?.['uid'], 'user-123');
+      assert.strictEqual((verifiedPayload as unknown as Record<string, unknown>)?.uid, 'user-123');
     });
 
     it('should set expiration with expiresIn string', async () => {
@@ -630,14 +650,14 @@ describe('Authentication Middleware', () => {
     it('should throw on invalid duration format', async () => {
       await assert.rejects(
         () => jwtSign({}, secret, { expiresIn: 'invalid' }),
-        /Invalid duration format/
+        /Invalid duration format/,
       );
     });
 
     it('should preserve custom payload claims', async () => {
       const token = await jwtSign(
         { uid: 'user-123', role: 'admin', custom: { nested: true } },
-        secret
+        secret,
       );
 
       const payloadB64 = token.split('.')[1];
@@ -683,11 +703,10 @@ describe('Authentication Middleware', () => {
 
     it('should produce tokens verifiable by jwtAuth with same secret', async () => {
       // Sign a token.
-      const token = await jwtSign(
-        { uid: 'user-123', email: 'test@example.com' },
-        secret,
-        { expiresIn: '1h', issuer: 'test-app' }
-      );
+      const token = await jwtSign({ uid: 'user-123', email: 'test@example.com' }, secret, {
+        expiresIn: '1h',
+        issuer: 'test-app',
+      });
 
       // Verify with jwtAuth middleware.
       const middleware = jwtAuth({
@@ -698,10 +717,10 @@ describe('Authentication Middleware', () => {
       });
 
       context.request = new Request('http://example.com/test', {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
-      const response = await middleware(context, next);
+      const _response = await middleware(context, next);
 
       assert.strictEqual(nextCalled, true);
       assert.deepStrictEqual((context as { user?: unknown }).user, {
@@ -726,7 +745,7 @@ describe('Authentication Middleware', () => {
       });
 
       context.request = new Request('http://example.com/test', {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       await middleware(context, next);
@@ -750,7 +769,7 @@ describe('Authentication Middleware', () => {
       });
 
       context.request = new Request('http://example.com/test', {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       await middleware(context, next);
@@ -770,7 +789,7 @@ describe('Authentication Middleware', () => {
       });
 
       context.request = new Request('http://example.com/test', {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       const response = await middleware(context, next);
@@ -796,17 +815,14 @@ describe('Authentication Middleware', () => {
     it('should throw on invalid token format', async () => {
       await assert.rejects(
         () => jwtVerify('not.a.valid.token.format', secret),
-        /Invalid JWT format/
+        /Invalid JWT format/,
       );
     });
 
     it('should throw on invalid signature', async () => {
       const token = await jwtSign({ uid: 'user-123' }, secret);
 
-      await assert.rejects(
-        () => jwtVerify(token, 'wrong-secret'),
-        /Invalid signature/
-      );
+      await assert.rejects(() => jwtVerify(token, 'wrong-secret'), /Invalid signature/);
     });
 
     it('should throw on expired token', async () => {
@@ -816,10 +832,7 @@ describe('Authentication Middleware', () => {
         expiresIn: '1h',
       });
 
-      await assert.rejects(
-        () => jwtVerify(token, secret),
-        /Token expired/
-      );
+      await assert.rejects(() => jwtVerify(token, secret), /Token expired/);
     });
 
     it('should throw on token not yet valid', async () => {
@@ -828,10 +841,7 @@ describe('Authentication Middleware', () => {
         expiresIn: '2h',
       });
 
-      await assert.rejects(
-        () => jwtVerify(token, secret),
-        /Token not yet valid/
-      );
+      await assert.rejects(() => jwtVerify(token, secret), /Token not yet valid/);
     });
 
     it('should verify with specific algorithm', async () => {
@@ -847,7 +857,7 @@ describe('Authentication Middleware', () => {
 
       await assert.rejects(
         () => jwtVerify(token, secret, { algorithms: ['HS256'] }),
-        /Unsupported algorithm/
+        /Unsupported algorithm/,
       );
     });
 

@@ -1,7 +1,7 @@
-import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { route, router } from './index.js';
+import { describe, it } from 'node:test';
 import { createHandler } from './handler.js';
+import { route, router } from './index.js';
 import type { MiddlewareContext, MiddlewareNext } from './middleware.js';
 
 describe('router.handler()', () => {
@@ -44,11 +44,14 @@ describe('router.handler()', () => {
       return response;
     };
 
-    const api = router({
-      test: router({
-        get: async () => ({ ok: true }),
-      }),
-    }, addHeader);
+    const api = router(
+      {
+        test: router({
+          get: async () => ({ ok: true }),
+        }),
+      },
+      addHeader,
+    );
 
     const handler = api.handler();
     const res = await handler(new Request('http://localhost/test'));
@@ -71,7 +74,7 @@ describe('router.handler()', () => {
     const res = await handler(
       new Request('http://localhost/test'),
       { KEY: 'secret' },
-      { waitUntil: () => {}, passThroughOnException: () => {} }
+      { waitUntil: () => {}, passThroughOnException: () => {} },
     );
 
     assert.strictEqual(res.status, 200);
@@ -93,7 +96,7 @@ describe('standalone router', () => {
           test: router({
             get: async () => Response.json({ ok: true }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/test'));
@@ -107,7 +110,7 @@ describe('standalone router', () => {
           test: router({
             post: async () => Response.json({ method: 'post' }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/test', { method: 'POST' }));
@@ -121,7 +124,7 @@ describe('standalone router', () => {
           test: router({
             put: async () => Response.json({ method: 'put' }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/test', { method: 'PUT' }));
@@ -134,7 +137,7 @@ describe('standalone router', () => {
           test: router({
             patch: async () => Response.json({ method: 'patch' }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/test', { method: 'PATCH' }));
@@ -147,7 +150,7 @@ describe('standalone router', () => {
           test: router({
             delete: async () => Response.json({ method: 'delete' }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/test', { method: 'DELETE' }));
@@ -160,7 +163,7 @@ describe('standalone router', () => {
           test: router({
             options: async () => Response.json({ method: 'options' }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/test', { method: 'OPTIONS' }));
@@ -173,7 +176,7 @@ describe('standalone router', () => {
           test: router({
             get: async () => Response.json({ data: 'hello' }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/test', { method: 'HEAD' }));
@@ -188,7 +191,7 @@ describe('standalone router', () => {
           test: router({
             post: async () => Response.json({ ok: true }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/test', { method: 'HEAD' }));
@@ -202,7 +205,7 @@ describe('standalone router', () => {
             head: async () => new Response(null, { status: 204 }),
             get: async () => Response.json({ data: 'from get' }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/test', { method: 'HEAD' }));
@@ -220,7 +223,7 @@ describe('standalone router', () => {
             set: router({ get: async () => Response.json({ action: 'set resource' }) }),
             delete: router({ get: async () => Response.json({ action: 'delete resource' }) }),
           }),
-        })
+        }),
       );
 
       // GET /resources/get should match the nested GET handler.
@@ -251,7 +254,7 @@ describe('standalone router', () => {
               get: async () => Response.json({ ok: true }),
             }),
           }),
-        })
+        }),
       );
 
       const matched = await handler(new Request('http://localhost/api/test'));
@@ -298,7 +301,7 @@ describe('standalone router', () => {
             get: async () => Response.json({ action: 'list' }),
             post: async () => Response.json({ action: 'create' }),
           }),
-        })
+        }),
       );
 
       const getRes = await handler(new Request('http://localhost/users'));
@@ -319,7 +322,7 @@ describe('standalone router', () => {
               handler: async (c) => Response.json({ name: c.query.name }),
             }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/test?name=alice'));
@@ -336,7 +339,7 @@ describe('standalone router', () => {
               handler: async (c) => Response.json({ count: c.query.count }),
             }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/test?count=42'));
@@ -353,7 +356,7 @@ describe('standalone router', () => {
               handler: async (c) => Response.json({ active: c.query.active }),
             }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/test?active=true'));
@@ -370,7 +373,7 @@ describe('standalone router', () => {
               handler: async (c) => Response.json({ name: c.query.name }),
             }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/test?name=bob'));
@@ -387,7 +390,7 @@ describe('standalone router', () => {
               handler: async (c) => Response.json({ query: c.query }),
             }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/test'));
@@ -404,7 +407,7 @@ describe('standalone router', () => {
               handler: async () => Response.json({}),
             }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/test'));
@@ -422,7 +425,7 @@ describe('standalone router', () => {
               handler: async () => Response.json({}),
             }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/test?count=notanumber'));
@@ -440,7 +443,7 @@ describe('standalone router', () => {
               handler: async (c) => Response.json({ name: c.body.name }),
             }),
           }),
-        })
+        }),
       );
 
       const res = await handler(
@@ -448,7 +451,7 @@ describe('standalone router', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: 'alice' }),
-        })
+        }),
       );
       assert.strictEqual(res.status, 200);
       assert.deepStrictEqual(await res.json(), { name: 'alice' });
@@ -463,7 +466,7 @@ describe('standalone router', () => {
               handler: async () => Response.json({ ok: true }),
             }),
           }),
-        })
+        }),
       );
 
       const res = await handler(
@@ -471,7 +474,7 @@ describe('standalone router', () => {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: 'bob' }),
-        })
+        }),
       );
       assert.strictEqual(res.status, 200);
     });
@@ -485,7 +488,7 @@ describe('standalone router', () => {
               handler: async () => Response.json({ ok: true }),
             }),
           }),
-        })
+        }),
       );
 
       const res = await handler(
@@ -493,7 +496,7 @@ describe('standalone router', () => {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({}),
-        })
+        }),
       );
       assert.strictEqual(res.status, 200);
     });
@@ -507,7 +510,7 @@ describe('standalone router', () => {
               handler: async () => Response.json({}),
             }),
           }),
-        })
+        }),
       );
 
       const res = await handler(
@@ -515,7 +518,7 @@ describe('standalone router', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: 'alice' }),
-        })
+        }),
       );
       assert.strictEqual(res.status, 400);
     });
@@ -529,7 +532,7 @@ describe('standalone router', () => {
               handler: async () => Response.json({}),
             }),
           }),
-        })
+        }),
       );
 
       const res = await handler(
@@ -537,7 +540,7 @@ describe('standalone router', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ count: 'not a number' }),
-        })
+        }),
       );
       assert.strictEqual(res.status, 400);
       const body = (await res.json()) as { error: string; details: object };
@@ -553,7 +556,7 @@ describe('standalone router', () => {
           test: router({
             get: async () => Response.json({ ok: true }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/test'));
@@ -569,7 +572,7 @@ describe('standalone router', () => {
               handler: async (c) => Response.json({ query: c.query }),
             }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/test?ignored=param'));
@@ -586,11 +589,11 @@ describe('standalone router', () => {
               handler: async (c) => Response.json({ q: c.query.q }),
             }),
           }),
-        })
+        }),
       );
 
       const res = await handler(
-        new Request('http://localhost/test?q=' + encodeURIComponent('hello world & more'))
+        new Request(`http://localhost/test?q=${encodeURIComponent('hello world & more')}`),
       );
       assert.strictEqual(res.status, 200);
       assert.deepStrictEqual(await res.json(), { q: 'hello world & more' });
@@ -605,11 +608,11 @@ describe('standalone router', () => {
               handler: async (c) => Response.json({ name: c.query.name }),
             }),
           }),
-        })
+        }),
       );
 
       const res = await handler(
-        new Request('http://localhost/test?name=' + encodeURIComponent('日本語'))
+        new Request(`http://localhost/test?name=${encodeURIComponent('日本語')}`),
       );
       assert.strictEqual(res.status, 200);
       assert.deepStrictEqual(await res.json(), { name: '日本語' });
@@ -624,7 +627,7 @@ describe('standalone router', () => {
               handler: async () => ({}),
             }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/test'));
@@ -637,7 +640,7 @@ describe('standalone router', () => {
           test: router({
             get: async () => ({}),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/test'));
@@ -658,7 +661,7 @@ describe('standalone router', () => {
               },
             }),
           }),
-        })
+        }),
       );
 
       await handler(new Request('http://localhost/r'));
@@ -675,7 +678,7 @@ describe('standalone router', () => {
                 hasCtx: c.executionCtx !== undefined,
               }),
           }),
-        })
+        }),
       );
 
       const mockEnv = { DB: 'test' };
@@ -696,7 +699,7 @@ describe('standalone router', () => {
               get: async (c) => Response.json({ bookId: c.path.id }),
             }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/books/123'));
@@ -717,7 +720,7 @@ describe('standalone router', () => {
               }),
             }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/books/abc/chapters/42'));
@@ -741,7 +744,7 @@ describe('standalone router', () => {
               }),
             }),
           }),
-        })
+        }),
       );
 
       const res = await handler(new Request('http://localhost/books/123?format=xml'));
@@ -757,10 +760,12 @@ describe('standalone router', () => {
               get: async (c) => Response.json({ userId: c.path.id }),
             }),
           }),
-        })
+        }),
       );
 
-      const res = await handler(new Request('http://localhost/users/' + encodeURIComponent('user@example.com')));
+      const res = await handler(
+        new Request(`http://localhost/users/${encodeURIComponent('user@example.com')}`),
+      );
       assert.strictEqual(res.status, 200);
       assert.deepStrictEqual(await res.json(), { userId: 'user@example.com' });
     });
@@ -797,8 +802,8 @@ describe('standalone router', () => {
               }),
             }),
           },
-          authMiddleware
-        )
+          authMiddleware,
+        ),
       );
 
       const res = await handler(new Request('http://localhost/profile'));
@@ -832,8 +837,9 @@ describe('standalone router', () => {
               }),
             }),
           },
-          authMiddleware, permissionsMiddleware
-        )
+          authMiddleware,
+          permissionsMiddleware,
+        ),
       );
 
       const res = await handler(new Request('http://localhost/data'));
@@ -866,8 +872,8 @@ describe('standalone router', () => {
               }),
             }),
           },
-          dbMiddleware
-        )
+          dbMiddleware,
+        ),
       );
 
       const res = await handler(new Request('http://localhost/status'), { API_KEY: 'secret123' });
@@ -917,8 +923,9 @@ describe('standalone router', () => {
               }),
             }),
           },
-          authMiddleware, dbMiddleware
-        )
+          authMiddleware,
+          dbMiddleware,
+        ),
       );
 
       const res = await handler(new Request('http://localhost/data'), { API_KEY: 'secret-key' });

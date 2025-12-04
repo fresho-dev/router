@@ -60,8 +60,8 @@ interface BaseMiddlewareContext {
 export type MiddlewareContext<Ctx = {}> = BaseMiddlewareContext & {
   env: Ctx extends { env: infer E } ? E : unknown;
 } & Partial<Omit<Ctx, 'env'>> & {
-  [key: string]: unknown;
-};
+    [key: string]: unknown;
+  };
 
 /**
  * Function to continue to the next middleware or handler.
@@ -95,9 +95,8 @@ export type MiddlewareNext = () => Promise<Response>;
  */
 export type Middleware<Ctx = {}> = (
   context: MiddlewareContext<Ctx>,
-  next: MiddlewareNext
+  next: MiddlewareNext,
 ) => Promise<Response> | Response;
-
 
 /**
  * Runs a chain of middleware with a final handler.
@@ -114,7 +113,7 @@ export type Middleware<Ctx = {}> = (
 export async function runMiddleware(
   middleware: Middleware[],
   context: MiddlewareContext,
-  finalHandler: () => Promise<Response>
+  finalHandler: () => Promise<Response>,
 ): Promise<Response> {
   let index = 0;
 

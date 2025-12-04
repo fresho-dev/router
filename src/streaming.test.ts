@@ -1,5 +1,5 @@
-import { describe, it } from 'node:test';
 import assert from 'node:assert';
+import { describe, it } from 'node:test';
 import { sseResponse, streamJsonLines } from './streaming.js';
 
 describe('streaming', () => {
@@ -80,10 +80,9 @@ describe('streaming', () => {
     });
 
     it('accepts custom headers', async () => {
-      const response = sseResponse(
-        async (send, close) => close(),
-        { headers: { 'X-Custom-Header': 'custom-value' } }
-      );
+      const response = sseResponse(async (send, close) => close(), {
+        headers: { 'X-Custom-Header': 'custom-value' },
+      });
 
       assert.strictEqual(response.headers.get('X-Custom-Header'), 'custom-value');
       assert.strictEqual(response.headers.get('Content-Type'), 'text/event-stream');
@@ -116,10 +115,9 @@ describe('streaming', () => {
     });
 
     it('accepts custom headers', async () => {
-      const response = streamJsonLines(
-        async (send, close) => close(),
-        { headers: { 'X-Custom-Header': 'custom-value' } }
-      );
+      const response = streamJsonLines(async (send, close) => close(), {
+        headers: { 'X-Custom-Header': 'custom-value' },
+      });
 
       assert.strictEqual(response.headers.get('X-Custom-Header'), 'custom-value');
       assert.strictEqual(response.headers.get('Content-Type'), 'application/x-ndjson');

@@ -19,10 +19,17 @@
  * ```
  */
 
-import type { Router, RouterRoutes, RouteDefinition, Method, ExecutionContext, RouterBrand } from './types.js';
-import type { SchemaDefinition, InferSchema } from './schema.js';
-import { isRouter, isRoute, isFunction, HTTP_METHODS } from './types.js';
+import type { InferSchema } from './schema.js';
 import { compileSchema } from './schema.js';
+import type {
+  ExecutionContext,
+  Method,
+  RouteDefinition,
+  Router,
+  RouterBrand,
+  RouterRoutes,
+} from './types.js';
+import { HTTP_METHODS, isFunction, isRoute, isRouter } from './types.js';
 
 // =============================================================================
 // Configuration Types
@@ -50,42 +57,50 @@ export interface LocalRequestOptions {
 type HttpMethods = 'get' | 'post' | 'put' | 'patch' | 'delete';
 
 type ExtractReturn<T> = T extends (...args: unknown[]) => infer R
-  ? R extends Promise<infer U> ? U : R
+  ? R extends Promise<infer U>
+    ? U
+    : R
   : unknown;
 
-type BuildOptions<HasPathParams extends boolean, Q, B> =
-  HasPathParams extends true
-    ? { path: Record<string, string> } & (keyof Q extends never ? {} : { query?: Q }) & (keyof B extends never ? {} : { body: B }) & LocalClientConfig
-    : (keyof Q extends never ? {} : { query?: Q }) & (keyof B extends never ? {} : { body: B }) & LocalClientConfig;
+type BuildOptions<HasPathParams extends boolean, Q, B> = HasPathParams extends true
+  ? { path: Record<string, string> } & (keyof Q extends never ? {} : { query?: Q }) &
+      (keyof B extends never ? {} : { body: B }) &
+      LocalClientConfig
+  : (keyof Q extends never ? {} : { query?: Q }) &
+      (keyof B extends never ? {} : { body: B }) &
+      LocalClientConfig;
 
-type MethodClient<T, HasPathParams extends boolean = false> =
-  T extends RouteDefinition<infer Q, infer B, infer R>
-    ? (options?: BuildOptions<HasPathParams, InferSchema<Q>, InferSchema<B>>) => Promise<R>
-    : T extends (...args: unknown[]) => unknown
-      ? (options?: BuildOptions<HasPathParams, {}, {}>) => Promise<ExtractReturn<T>>
-      : never;
+type MethodClient<T, HasPathParams extends boolean = false> = T extends RouteDefinition<
+  infer Q,
+  infer B,
+  infer R
+>
+  ? (options?: BuildOptions<HasPathParams, InferSchema<Q>, InferSchema<B>>) => Promise<R>
+  : T extends (...args: unknown[]) => unknown
+    ? (options?: BuildOptions<HasPathParams, {}, {}>) => Promise<ExtractReturn<T>>
+    : never;
 
-type HasParams<Path extends string[]> =
-  Path extends [infer Head, ...infer Rest extends string[]]
-    ? Head extends `$${string}` ? true : HasParams<Rest>
-    : false;
+type HasParams<Path extends string[]> = Path extends [infer Head, ...infer Rest extends string[]]
+  ? Head extends `$${string}`
+    ? true
+    : HasParams<Rest>
+  : false;
 
 type RouterClient<T extends RouterRoutes, Path extends string[] = []> = {
-  [K in keyof T as K extends HttpMethods ? K : never]:
-    T[K] extends RouteDefinition | ((...args: unknown[]) => unknown)
-      ? MethodClient<T[K], HasParams<Path>>
-      : never;
+  [K in keyof T as K extends HttpMethods ? K : never]: T[K] extends
+    | RouteDefinition
+    | ((...args: unknown[]) => unknown)
+    ? MethodClient<T[K], HasParams<Path>>
+    : never;
 } & {
   // Uses RouterBrand check first to handle cross-module type inference.
-  [K in keyof T as K extends HttpMethods ? never : K]:
-    T[K] extends RouterBrand
-      ? T[K] extends Router<infer Routes>
-        ? RouterClient<Routes, [...Path, K & string]> & ((options?: LocalRequestOptions) => Promise<unknown>)
-        : never
-      : never;
-} & {
-  (options?: LocalRequestOptions): Promise<unknown>;
-};
+  [K in keyof T as K extends HttpMethods ? never : K]: T[K] extends RouterBrand
+    ? T[K] extends Router<infer Routes>
+      ? RouterClient<Routes, [...Path, K & string]> &
+          ((options?: LocalRequestOptions) => Promise<unknown>)
+      : never
+    : never;
+} & ((options?: LocalRequestOptions) => Promise<unknown>);
 
 export type LocalClient<T extends Router<RouterRoutes>> = {
   configure(config: LocalClientConfig): void;
@@ -112,7 +127,7 @@ interface RouteInfo {
 function findHandler(
   routerDef: Router<RouterRoutes>,
   segments: string[],
-  method: string
+  method: string,
 ): RouteInfo | null {
   let current: Router<RouterRoutes> | undefined = routerDef;
 
@@ -155,7 +170,7 @@ function findHandler(
  */
 function collectPathParams(
   segments: string[],
-  pathValues?: Record<string, string>
+  pathValues?: Record<string, string>,
 ): Record<string, string> {
   const params: Record<string, string> = {};
 
@@ -190,9 +205,7 @@ function collectPathParams(
  * await client.users.$id({ path: { id: '123' } });
  * ```
  */
-export function createLocalClient<T extends Router<RouterRoutes>>(
-  routerDef: T
-): LocalClient<T> {
+export function createLocalClient<T extends Router<RouterRoutes>>(routerDef: T): LocalClient<T> {
   const sharedConfig: SharedConfig = { current: {} };
 
   const client = {
@@ -210,7 +223,13 @@ export function createLocalClient<T extends Router<RouterRoutes>>(
       return undefined;
     },
     apply(_target, _thisArg, args) {
-      return invokeHandler(sharedConfig, routerDef, [], 'get', args[0] as LocalRequestOptions | undefined);
+      return invokeHandler(
+        sharedConfig,
+        routerDef,
+        [],
+        'get',
+        args[0] as LocalRequestOptions | undefined,
+      );
     },
   }) as LocalClient<T>;
 }
@@ -219,7 +238,7 @@ export function createLocalClient<T extends Router<RouterRoutes>>(
 function createPathProxy(
   sharedConfig: SharedConfig,
   routerDef: Router<RouterRoutes>,
-  segments: string[]
+  segments: string[],
 ): unknown {
   const callable = (options?: LocalRequestOptions) => {
     return invokeHandler(sharedConfig, routerDef, segments, 'get', options);
@@ -249,7 +268,7 @@ async function invokeHandler(
   routerDef: Router<RouterRoutes>,
   segments: string[],
   method: string,
-  options?: LocalRequestOptions
+  options?: LocalRequestOptions,
 ): Promise<unknown> {
   const config = sharedConfig.current;
   const routeInfo = findHandler(routerDef, segments, method);
@@ -283,9 +302,9 @@ async function invokeHandler(
 
   // Build path for synthetic request URL.
   const pathParts = segments.map((s) =>
-    s.startsWith('$') ? encodeURIComponent(pathParams[s.slice(1)] || '') : s
+    s.startsWith('$') ? encodeURIComponent(pathParams[s.slice(1)] || '') : s,
   );
-  const urlPath = '/' + pathParts.join('/');
+  const urlPath = `/${pathParts.join('/')}`;
   const url = new URL(urlPath, 'http://localhost');
   if (options?.query) {
     for (const [key, value] of Object.entries(options.query)) {

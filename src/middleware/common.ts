@@ -34,7 +34,7 @@ import type { Middleware, MiddlewareContext } from '../middleware.js';
 export class HttpError extends Error {
   constructor(
     message: string,
-    public status: number
+    public status: number,
   ) {
     super(message);
     this.name = 'HttpError';
@@ -243,7 +243,7 @@ export class MemoryRateLimitStore implements RateLimitStore {
 
   constructor(
     private windowMs: number,
-    options?: { cleanupIntervalMs?: number }
+    options?: { cleanupIntervalMs?: number },
   ) {
     // Default cleanup interval is the window duration or 60 seconds, whichever is larger.
     this.cleanupIntervalMs = options?.cleanupIntervalMs ?? Math.max(windowMs, 60_000);
@@ -360,8 +360,10 @@ export function rateLimit(options: RateLimitOptions = {}): Middleware {
     const response = await next();
 
     // Optionally don't count successful/failed requests
-    if ((config.skipSuccessfulRequests && response.status < 400) ||
-        (config.skipFailedRequests && response.status >= 400)) {
+    if (
+      (config.skipSuccessfulRequests && response.status < 400) ||
+      (config.skipFailedRequests && response.status >= 400)
+    ) {
       await store.decrement(key);
     }
 
@@ -499,7 +501,9 @@ export interface ContentTypeOptions {
  * ```
  */
 export function contentType(options: ContentTypeOptions): Middleware {
-  const skipMethods = new Set(options.skipMethods?.map(m => m.toUpperCase()) || ['GET', 'HEAD', 'OPTIONS']);
+  const skipMethods = new Set(
+    options.skipMethods?.map((m) => m.toUpperCase()) || ['GET', 'HEAD', 'OPTIONS'],
+  );
 
   return async (context, next) => {
     if (skipMethods.has(context.request.method.toUpperCase())) {
@@ -513,11 +517,11 @@ export function contentType(options: ContentTypeOptions): Middleware {
       });
     }
 
-    const matches = options.types.some(type => contentType.includes(type));
+    const matches = options.types.some((type) => contentType.includes(type));
     if (!matches) {
       return new Response(
         options.message || `Unsupported Media Type. Expected: ${options.types.join(', ')}`,
-        { status: 415 }
+        { status: 415 },
       );
     }
 

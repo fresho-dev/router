@@ -32,25 +32,20 @@
 
 // Compose utility
 export { compose } from '../middleware.js';
-
-// CORS middleware
-export type { CorsOptions } from './cors.js';
-export { cors } from './cors.js';
-
 // Authentication middleware
 export type {
   BasicAuthOptions,
+  BearerAuthOptions,
   JwtAlgorithm,
   JwtAuthOptions,
   JwtPayload,
   SignJwtOptions,
   VerifyJwtOptions,
-  BearerAuthOptions,
 } from './auth.js';
-export { basicAuth, jwtAuth, jwtSign, jwtVerify, bearerAuth } from './auth.js';
-
+export { basicAuth, bearerAuth, jwtAuth, jwtSign, jwtVerify } from './auth.js';
 // Common middleware utilities
 export type {
+  ContentTypeOptions,
   ErrorHandlerOptions,
   LoggerOptions,
   LogInfo,
@@ -58,15 +53,17 @@ export type {
   RateLimitStore,
   RequestIdOptions,
   TimeoutOptions,
-  ContentTypeOptions,
 } from './common.js';
 export {
-  HttpError,
+  contentType,
   errorHandler,
+  HttpError,
   logger,
-  rateLimit,
   MemoryRateLimitStore,
+  rateLimit,
   requestId,
   timeout,
-  contentType,
 } from './common.js';
+// CORS middleware
+export type { CorsOptions } from './cors.js';
+export { cors } from './cors.js';

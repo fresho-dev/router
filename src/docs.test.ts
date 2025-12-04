@@ -1,5 +1,5 @@
-import { describe, it } from 'node:test';
 import assert from 'node:assert';
+import { describe, it } from 'node:test';
 import { route, router } from './core.js';
 import { generateDocs } from './docs.js';
 
@@ -90,7 +90,10 @@ describe('docs', () => {
             }),
           }),
         }),
-      }) as Record<string, Record<string, Record<string, Record<string, Array<Record<string, unknown>>>>>>;
+      }) as Record<
+        string,
+        Record<string, Record<string, Record<string, Array<Record<string, unknown>>>>>
+      >;
 
       const params = spec.paths['/test'].get.parameters;
       const reqParam = params.find((p) => p.name === 'required');
@@ -112,7 +115,13 @@ describe('docs', () => {
             }),
           }),
         }),
-      }) as Record<string, Record<string, Record<string, Record<string, Array<Record<string, Record<string, string>>>>>>>;
+      }) as Record<
+        string,
+        Record<
+          string,
+          Record<string, Record<string, Array<Record<string, Record<string, string>>>>>
+        >
+      >;
 
       const param = spec.paths['/test'].get.parameters[0];
       assert.strictEqual(param.schema.type, 'number');

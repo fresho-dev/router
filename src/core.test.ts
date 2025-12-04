@@ -1,5 +1,5 @@
-import { describe, it } from 'node:test';
 import assert from 'node:assert';
+import { describe, it } from 'node:test';
 import { route, router } from './core.js';
 
 describe('core', () => {
@@ -98,7 +98,11 @@ describe('core', () => {
         }),
       });
 
-      const usersRoute = r.routes.users.routes.post as { query?: unknown; body?: unknown; description?: string };
+      const usersRoute = r.routes.users.routes.post as {
+        query?: unknown;
+        body?: unknown;
+        description?: string;
+      };
       assert.deepStrictEqual(usersRoute.query, { limit: 'number' });
       assert.deepStrictEqual(usersRoute.body, { name: 'string' });
       assert.strictEqual(usersRoute.description, 'Create user');

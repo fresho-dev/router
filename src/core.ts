@@ -41,11 +41,11 @@
  * ```
  */
 
+import { createHandler } from './handler.js';
+import type { Middleware } from './middleware.js';
 import type { SchemaDefinition } from './schema.js';
 import type { RouteDefinition, Router, RouterRoutes } from './types.js';
 import { ROUTE_MARKER, ROUTER_MARKER } from './types.js';
-import type { Middleware } from './middleware.js';
-import { createHandler } from './handler.js';
 
 /**
  * Creates a route with query/body validation schemas.
@@ -88,7 +88,7 @@ export function route<
 /** Return type of route.ctx<T>() - callable and chainable. */
 interface CtxBuilder<Ctx> {
   <const Q extends SchemaDefinition, const B extends SchemaDefinition, R = unknown>(
-    definition: RouteDefinition<Q, B, R, {}, Ctx>
+    definition: RouteDefinition<Q, B, R, {}, Ctx>,
   ): RouteDefinition<Q, B, R, {}, Ctx>;
 
   ctx<AdditionalCtx>(): CtxBuilder<Ctx & AdditionalCtx>;
@@ -96,12 +96,8 @@ interface CtxBuilder<Ctx> {
 
 /** Creates a chainable context builder. */
 function createCtxBuilder<Ctx>(): CtxBuilder<Ctx> {
-  const builder = <
-    const Q extends SchemaDefinition,
-    const B extends SchemaDefinition,
-    R = unknown,
-  >(
-    definition: RouteDefinition<Q, B, R, {}, Ctx>
+  const builder = <const Q extends SchemaDefinition, const B extends SchemaDefinition, R = unknown>(
+    definition: RouteDefinition<Q, B, R, {}, Ctx>,
   ): RouteDefinition<Q, B, R, {}, Ctx> =>
     ({ ...definition, [ROUTE_MARKER]: true }) as RouteDefinition<Q, B, R, {}, Ctx>;
 
@@ -141,9 +137,7 @@ function createCtxBuilder<Ctx>(): CtxBuilder<Ctx> {
  * })
  * ```
  */
-route.ctx = function <Ctx>(): CtxBuilder<Ctx> {
-  return createCtxBuilder<Ctx>();
-};
+route.ctx = <Ctx>(): CtxBuilder<Ctx> => createCtxBuilder<Ctx>();
 
 /**
  * Creates a router that groups paths and applies middleware.

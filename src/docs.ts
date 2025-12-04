@@ -10,8 +10,8 @@
  */
 
 import type { SchemaDefinition } from './schema.js';
-import type { Router, RouterRoutes, RouteDefinition } from './types.js';
-import { isRouter, isRoute, isFunction, HTTP_METHODS } from './types.js';
+import type { RouteDefinition, Router, RouterRoutes } from './types.js';
+import { HTTP_METHODS, isFunction, isRoute, isRouter } from './types.js';
 
 /** Collected route info for documentation. */
 interface CollectedRoute {
@@ -23,16 +23,13 @@ interface CollectedRoute {
 /** Converts property name to path segment, handling $param convention. */
 function propertyToSegment(prop: string): string {
   if (prop.startsWith('$')) {
-    return '{' + prop.slice(1) + '}';
+    return `{${prop.slice(1)}}`;
   }
   return prop;
 }
 
 /** Collects all routes from a router tree. */
-function collectRoutes(
-  routerDef: Router<RouterRoutes>,
-  parentPath = ''
-): CollectedRoute[] {
+function collectRoutes(routerDef: Router<RouterRoutes>, parentPath = ''): CollectedRoute[] {
   const collectedRoutes: CollectedRoute[] = [];
 
   for (const [prop, entry] of Object.entries(routerDef.routes)) {
@@ -107,7 +104,7 @@ export function generateDocs(config: {
                   }
                   // Nested object - simplified representation.
                   return [name, { type: 'object' }];
-                })
+                }),
               ),
               required: Object.entries(bodySchema)
                 .filter(([, type]) => typeof type === 'string' && !type.endsWith('?'))

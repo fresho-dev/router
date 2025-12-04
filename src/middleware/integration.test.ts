@@ -2,14 +2,14 @@
  * @fileoverview Integration tests for middleware with routers.
  */
 
-import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { router, route } from '../core.js';
+import { describe, it } from 'node:test';
+import { route, router } from '../core.js';
 import { createHandler } from '../handler.js';
-import { cors, basicAuth, errorHandler, requestId, jwtAuth, jwtSign } from './index.js';
 import { createHttpClient } from '../http-client.js';
 import type { Middleware } from '../middleware.js';
 import type { FetchHandler } from '../types.js';
+import { basicAuth, cors, errorHandler, jwtAuth, jwtSign, requestId } from './index.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -34,7 +34,7 @@ describe('Middleware Integration', () => {
             get: async () => Response.json({ posts: [] }),
           }),
         },
-        loggingMiddleware
+        loggingMiddleware,
       );
 
       const handler = createHandler(apiRouter);
@@ -86,27 +86,31 @@ describe('Middleware Integration', () => {
             },
           }),
         },
-        v1Middleware
+        v1Middleware,
       );
 
       const apiRouter = router(
         {
           v1: v1Router,
         },
-        apiMiddleware
+        apiMiddleware,
       );
 
       const mainRouter = router(
         {
           api: apiRouter,
         },
-        globalMiddleware
+        globalMiddleware,
       );
 
       const handler = createHandler(mainRouter);
       const response = await handler(new Request('http://example.com/api/v1/users'));
 
-      assert.strictEqual(response.status, 200, `Expected 200, got ${response.status}: ${await response.text()}`);
+      assert.strictEqual(
+        response.status,
+        200,
+        `Expected 200, got ${response.status}: ${await response.text()}`,
+      );
 
       assert.deepStrictEqual(order, [
         'global-before',
@@ -128,7 +132,7 @@ describe('Middleware Integration', () => {
             get: async () => Response.json({ data: 'test' }),
           }),
         },
-        cors({ origin: 'https://example.com', credentials: true })
+        cors({ origin: 'https://example.com', credentials: true }),
       );
 
       const handler = createHandler(apiRouter);
@@ -138,34 +142,31 @@ describe('Middleware Integration', () => {
         new Request('http://localhost/data', {
           method: 'OPTIONS',
           headers: {
-            'Origin': 'https://example.com',
+            Origin: 'https://example.com',
           },
-        })
+        }),
       );
 
       assert.strictEqual(preflightResponse.status, 204);
       assert.strictEqual(
         preflightResponse.headers.get('Access-Control-Allow-Origin'),
-        'https://example.com'
+        'https://example.com',
       );
-      assert.strictEqual(
-        preflightResponse.headers.get('Access-Control-Allow-Credentials'),
-        'true'
-      );
+      assert.strictEqual(preflightResponse.headers.get('Access-Control-Allow-Credentials'), 'true');
 
       // Test actual request
       const response = await handler(
         new Request('http://localhost/data', {
           headers: {
-            'Origin': 'https://example.com',
+            Origin: 'https://example.com',
           },
-        })
+        }),
       );
 
       assert.strictEqual(response.status, 200);
       assert.strictEqual(
         response.headers.get('Access-Control-Allow-Origin'),
-        'https://example.com'
+        'https://example.com',
       );
     });
   });
@@ -185,7 +186,7 @@ describe('Middleware Integration', () => {
             }
             return null;
           },
-        })
+        }),
       );
 
       const handler = createHandler(adminRouter);
@@ -195,7 +196,7 @@ describe('Middleware Integration', () => {
       assert.strictEqual(response.status, 401);
       assert.strictEqual(
         response.headers.get('WWW-Authenticate'),
-        'Basic realm="Secure Area", charset="UTF-8"'
+        'Basic realm="Secure Area", charset="UTF-8"',
       );
 
       // Test with invalid credentials
@@ -203,9 +204,9 @@ describe('Middleware Integration', () => {
       response = await handler(
         new Request('http://localhost/users', {
           headers: {
-            'Authorization': `Basic ${invalidAuth}`,
+            Authorization: `Basic ${invalidAuth}`,
           },
-        })
+        }),
       );
       assert.strictEqual(response.status, 401);
 
@@ -214,9 +215,9 @@ describe('Middleware Integration', () => {
       response = await handler(
         new Request('http://localhost/users', {
           headers: {
-            'Authorization': `Basic ${validAuth}`,
+            Authorization: `Basic ${validAuth}`,
           },
-        })
+        }),
       );
       assert.strictEqual(response.status, 200);
       const body = await response.json();
@@ -238,7 +239,7 @@ describe('Middleware Integration', () => {
         },
         basicAuth({
           verify: async () => ({ authenticated: true }),
-        })
+        }),
       );
 
       const mainRouter = router({
@@ -271,7 +272,7 @@ describe('Middleware Integration', () => {
             get: async () => Response.json({ ok: true }),
           }),
         },
-        errorHandler({ expose: false })
+        errorHandler({ expose: false }),
       );
 
       const handler = createHandler(apiRouter);
@@ -306,7 +307,7 @@ describe('Middleware Integration', () => {
             }
             return null;
           },
-        })
+        }),
       );
 
       const handler = createHandler(apiRouter);
@@ -317,11 +318,11 @@ describe('Middleware Integration', () => {
         new Request('http://localhost/data', {
           method: 'POST',
           headers: {
-            'Authorization': `Basic ${validAuth}`,
-            'Origin': 'https://app.example.com',
+            Authorization: `Basic ${validAuth}`,
+            Origin: 'https://app.example.com',
           },
           body: JSON.stringify({ test: 'data' }),
-        })
+        }),
       );
 
       assert.strictEqual(response.status, 200);
@@ -357,21 +358,21 @@ describe('Middleware Integration', () => {
             },
           }),
         },
-        createTrackerMiddleware('v2')
+        createTrackerMiddleware('v2'),
       );
 
       const apiRouter = router(
         {
           v2: v2Router,
         },
-        createTrackerMiddleware('api')
+        createTrackerMiddleware('api'),
       );
 
       const mainRouter = router(
         {
           api: apiRouter,
         },
-        createTrackerMiddleware('main')
+        createTrackerMiddleware('main'),
       );
 
       const handler = createHandler(mainRouter);
@@ -428,7 +429,9 @@ describe('Middleware Integration', () => {
             get: async () => Response.json({ message: 'profile' }),
           }),
         },
-        addUserMiddleware, checkUserMiddleware, checkAllMiddleware
+        addUserMiddleware,
+        checkUserMiddleware,
+        checkAllMiddleware,
       );
 
       const handler = createHandler(apiRouter);
@@ -469,7 +472,7 @@ describe('Middleware Integration', () => {
             }),
           }),
         },
-        trackingMiddleware
+        trackingMiddleware,
       );
 
       const handler = createHandler(apiRouter);
@@ -481,7 +484,7 @@ describe('Middleware Integration', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: 'John', age: 30 }),
-        })
+        }),
       );
 
       assert.strictEqual(response.status, 200);
@@ -494,7 +497,7 @@ describe('Middleware Integration', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: 'John' }), // Missing age
-        })
+        }),
       );
 
       assert.strictEqual(response.status, 400);
@@ -529,7 +532,8 @@ describe('Middleware Integration', () => {
             },
           }),
         },
-        authMiddleware, loggingMiddleware
+        authMiddleware,
+        loggingMiddleware,
       );
 
       const handler = createHandler(apiRouter);
@@ -544,8 +548,8 @@ describe('Middleware Integration', () => {
       executed.length = 0;
       response = await handler(
         new Request('http://localhost/data', {
-          headers: { 'Authorization': 'Bearer token' },
-        })
+          headers: { Authorization: 'Bearer token' },
+        }),
       );
       assert.strictEqual(response.status, 200);
       assert.deepStrictEqual(executed, ['auth', 'logging', 'handler']);
@@ -576,14 +580,13 @@ describe('Middleware Integration', () => {
             }),
           }),
         },
-        typedMiddleware
+        typedMiddleware,
       );
 
       const handler = createHandler(apiRouter);
-      const response = await handler(
-        new Request('http://localhost/profile'),
-        { JWT_SECRET: 'secret' }
-      );
+      const response = await handler(new Request('http://localhost/profile'), {
+        JWT_SECRET: 'secret',
+      });
 
       assert.strictEqual(response.status, 200);
       const body = await response.json();
@@ -594,7 +597,7 @@ describe('Middleware Integration', () => {
   describe('JWT End-to-End with Both Clients', () => {
     async function withServer(
       handler: FetchHandler,
-      fn: (port: number) => Promise<void>
+      fn: (port: number) => Promise<void>,
     ): Promise<void> {
       const { createServer } = await import('node:http');
 
@@ -684,23 +687,22 @@ describe('Middleware Integration', () => {
             role: payload.role as 'admin' | 'user',
           },
         }),
-      })
+      }),
     );
 
     const handler = createHandler(api);
 
     describe('localClient', () => {
       it('should allow authenticated requests', async () => {
-        const token = await jwtSign(
-          { email: 'alice@example.com', role: 'admin' },
-          JWT_SECRET,
-          { expiresIn: '1h', subject: 'user-123' }
-        );
+        const token = await jwtSign({ email: 'alice@example.com', role: 'admin' }, JWT_SECRET, {
+          expiresIn: '1h',
+          subject: 'user-123',
+        });
 
         const response = await handler(
           new Request('http://localhost/profile?include=settings', {
             headers: { Authorization: `Bearer ${token}` },
-          })
+          }),
         );
 
         assert.strictEqual(response.status, 200);
@@ -725,11 +727,10 @@ describe('Middleware Integration', () => {
 
     describe('httpClient', () => {
       it('should allow authenticated requests (end-to-end)', async () => {
-        const token = await jwtSign(
-          { email: 'alice@example.com', role: 'admin' },
-          JWT_SECRET,
-          { expiresIn: '1h', subject: 'user-123' }
-        );
+        const token = await jwtSign({ email: 'alice@example.com', role: 'admin' }, JWT_SECRET, {
+          expiresIn: '1h',
+          subject: 'user-123',
+        });
 
         await withServer(handler, async (port) => {
           const client: AnyClient = createHttpClient({
@@ -769,20 +770,19 @@ describe('Middleware Integration', () => {
                 error.message.includes('401') ||
                   error.message.includes('Unauthorized') ||
                   error.message.includes('Missing token'),
-                `Expected error about 401/unauthorized, got: ${error.message}`
+                `Expected error about 401/unauthorized, got: ${error.message}`,
               );
               return true;
-            }
+            },
           );
         });
       });
 
       it('should support per-request headers', async () => {
-        const token = await jwtSign(
-          { email: 'charlie@example.com', role: 'user' },
-          JWT_SECRET,
-          { expiresIn: '1h', subject: 'user-789' }
-        );
+        const token = await jwtSign({ email: 'charlie@example.com', role: 'user' }, JWT_SECRET, {
+          expiresIn: '1h',
+          subject: 'user-789',
+        });
 
         await withServer(handler, async (port) => {
           const client: AnyClient = createHttpClient({
@@ -806,13 +806,13 @@ describe('Middleware Integration', () => {
       const expiredToken = await jwtSign(
         { email: 'expired@example.com', role: 'user' },
         JWT_SECRET,
-        { expiresIn: -3600, subject: 'user-expired' }
+        { expiresIn: -3600, subject: 'user-expired' },
       );
 
       const response = await handler(
         new Request('http://localhost/profile', {
           headers: { Authorization: `Bearer ${expiredToken}` },
-        })
+        }),
       );
 
       assert.strictEqual(response.status, 401);

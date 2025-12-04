@@ -2,19 +2,19 @@
  * @fileoverview Tests for common middleware utilities.
  */
 
-import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
+import { beforeEach, describe, it } from 'node:test';
+import type { MiddlewareContext } from '../middleware.js';
 import {
+  contentType,
   errorHandler,
+  type LogInfo,
   logger,
-  rateLimit,
   MemoryRateLimitStore,
+  rateLimit,
   requestId,
   timeout,
-  contentType,
-  type LogInfo,
 } from './common.js';
-import type { MiddlewareContext } from '../middleware.js';
 
 describe('Common Middleware', () => {
   let context: MiddlewareContext;
@@ -26,7 +26,9 @@ describe('Common Middleware', () => {
     nextResponse = new Response('test response');
     context = {
       request: new Request('http://example.com/test'),
-      path: {}, query: {}, body: {},
+      path: {},
+      query: {},
+      body: {},
       env: {},
     };
   });
@@ -108,10 +110,10 @@ describe('Common Middleware', () => {
     it('should use custom formatter', async () => {
       const middleware = errorHandler({
         formatter: async (error) => {
-          return new Response(
-            JSON.stringify({ custom: error.message }),
-            { status: 418, headers: { 'Content-Type': 'application/json' } }
-          );
+          return new Response(JSON.stringify({ custom: error.message }), {
+            status: 418,
+            headers: { 'Content-Type': 'application/json' },
+          });
         },
       });
 
@@ -143,7 +145,7 @@ describe('Common Middleware', () => {
       });
 
       nextResponse = new Response('test', { status: 200 });
-      const response = await middleware(context, next);
+      const _response = await middleware(context, next);
 
       assert.strictEqual(logs.length, 2);
       assert(logs[0].includes('GET'));
@@ -166,7 +168,7 @@ describe('Common Middleware', () => {
       context.request = new Request('http://example.com/test', {
         headers: {
           'User-Agent': 'Test Agent',
-          'Accept': 'application/json',
+          Accept: 'application/json',
         },
       });
 
@@ -175,7 +177,7 @@ describe('Common Middleware', () => {
       assert(loggedInfo);
       assert(loggedInfo.headers);
       assert.strictEqual(loggedInfo.headers['user-agent'], 'Test Agent');
-      assert.strictEqual(loggedInfo.headers['accept'], 'application/json');
+      assert.strictEqual(loggedInfo.headers.accept, 'application/json');
     });
 
     it('should include body when configured', async () => {
@@ -379,7 +381,7 @@ describe('Common Middleware', () => {
       await store.increment('key1');
 
       // Wait for window to expire
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
       const count = await store.increment('key1');
       assert.strictEqual(count, 1);
@@ -407,7 +409,7 @@ describe('Common Middleware', () => {
       assert.strictEqual(store.size, 3);
 
       // Wait for entries to expire and cleanup interval to pass.
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Trigger cleanup by making a new request.
       await store.increment('key4');
@@ -469,7 +471,7 @@ describe('Common Middleware', () => {
       const middleware = timeout({ timeout: 100 });
 
       const slowNext = async () => {
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise((resolve) => setTimeout(resolve, 200));
         return new Response('should not reach');
       };
 
@@ -483,7 +485,7 @@ describe('Common Middleware', () => {
       const middleware = timeout({ timeout: 100 });
 
       const fastNext = async () => {
-        await new Promise(resolve => setTimeout(resolve, 10));
+        await new Promise((resolve) => setTimeout(resolve, 10));
         return new Response('success');
       };
 
@@ -500,7 +502,7 @@ describe('Common Middleware', () => {
       });
 
       const slowNext = async () => {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
         return new Response('should not reach');
       };
 

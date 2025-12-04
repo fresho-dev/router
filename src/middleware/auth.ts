@@ -18,7 +18,7 @@ export interface BasicAuthOptions {
   verify: (
     username: string,
     password: string,
-    context: MiddlewareContext
+    context: MiddlewareContext,
   ) => Promise<Record<string, unknown> | null> | Record<string, unknown> | null;
 }
 
@@ -76,7 +76,7 @@ export function basicAuth(options: BasicAuthOptions): Middleware {
 
       Object.assign(context, claims);
       return next();
-    } catch (error) {
+    } catch (_error) {
       return new Response('Invalid credentials', {
         status: 401,
         headers: {
@@ -190,7 +190,7 @@ export interface JwtAuthOptions<Ctx = {}> {
 export async function jwtVerify(
   token: string,
   secret: string | ArrayBuffer | CryptoKey,
-  options: VerifyJwtOptions = {}
+  options: VerifyJwtOptions = {},
 ): Promise<JwtPayload> {
   const algorithms = options.algorithms || ['HS256'];
 
@@ -218,28 +218,21 @@ export async function jwtVerify(
 
   // Verify signature using Web Crypto API.
   const data = `${headerB64}.${payloadB64}`;
-  const signature = Uint8Array.from(atob(signatureB64.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+  const signature = Uint8Array.from(atob(signatureB64.replace(/-/g, '+').replace(/_/g, '/')), (c) =>
+    c.charCodeAt(0),
+  );
 
   let key: CryptoKey;
   if (secret instanceof CryptoKey) {
     key = secret;
   } else {
     const keyData = typeof secret === 'string' ? new TextEncoder().encode(secret) : secret;
-    key = await crypto.subtle.importKey(
-      'raw',
-      keyData,
-      { name: 'HMAC', hash: hashAlg },
-      false,
-      ['verify']
-    );
+    key = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: hashAlg }, false, [
+      'verify',
+    ]);
   }
 
-  const valid = await crypto.subtle.verify(
-    'HMAC',
-    key,
-    signature,
-    new TextEncoder().encode(data)
-  );
+  const valid = await crypto.subtle.verify('HMAC', key, signature, new TextEncoder().encode(data));
 
   if (!valid) {
     throw new Error('Invalid signature');
@@ -266,19 +259,27 @@ function parseDuration(duration: string | number): number {
 
   const match = duration.match(/^(\d+)\s*(s|m|h|d|w)$/i);
   if (!match) {
-    throw new Error(`Invalid duration format: ${duration}. Use formats like '1h', '7d', '30m', '60s'.`);
+    throw new Error(
+      `Invalid duration format: ${duration}. Use formats like '1h', '7d', '30m', '60s'.`,
+    );
   }
 
   const value = parseInt(match[1], 10);
   const unit = match[2].toLowerCase();
 
   switch (unit) {
-    case 's': return value;
-    case 'm': return value * 60;
-    case 'h': return value * 60 * 60;
-    case 'd': return value * 60 * 60 * 24;
-    case 'w': return value * 60 * 60 * 24 * 7;
-    default: throw new Error(`Unknown duration unit: ${unit}`);
+    case 's':
+      return value;
+    case 'm':
+      return value * 60;
+    case 'h':
+      return value * 60 * 60;
+    case 'd':
+      return value * 60 * 60 * 24;
+    case 'w':
+      return value * 60 * 60 * 24 * 7;
+    default:
+      throw new Error(`Unknown duration unit: ${unit}`);
   }
 }
 
@@ -321,13 +322,15 @@ function base64urlEncode(data: string | Uint8Array): string {
 export async function jwtSign(
   payload: Record<string, unknown>,
   secret: JwtSecret,
-  options: SignJwtOptions = {}
+  options: SignJwtOptions = {},
 ): Promise<string> {
   const algorithm = options.algorithm || 'HS256';
   const hashAlg = ALGORITHM_MAP[algorithm];
 
   const now = options.issuedAt
-    ? (options.issuedAt instanceof Date ? Math.floor(options.issuedAt.getTime() / 1000) : options.issuedAt)
+    ? options.issuedAt instanceof Date
+      ? Math.floor(options.issuedAt.getTime() / 1000)
+      : options.issuedAt
     : Math.floor(Date.now() / 1000);
 
   // Build the final payload with registered claims.
@@ -370,21 +373,13 @@ export async function jwtSign(
     key = secret;
   } else {
     const keyData = typeof secret === 'string' ? new TextEncoder().encode(secret) : secret;
-    key = await crypto.subtle.importKey(
-      'raw',
-      keyData,
-      { name: 'HMAC', hash: hashAlg },
-      false,
-      ['sign']
-    );
+    key = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: hashAlg }, false, [
+      'sign',
+    ]);
   }
 
   // Sign the data.
-  const signatureBuffer = await crypto.subtle.sign(
-    'HMAC',
-    key,
-    new TextEncoder().encode(data)
-  );
+  const signatureBuffer = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
 
   const signatureB64 = base64urlEncode(new Uint8Array(signatureBuffer));
 
@@ -417,21 +412,23 @@ export async function jwtSign(
  * ```
  */
 export function jwtAuth<Ctx = {}>(options: JwtAuthOptions<Ctx>): Middleware<Ctx> {
-  const getToken = options.getToken || ((req) => {
-    const auth = req.headers.get('Authorization');
-    if (auth?.startsWith('Bearer ')) {
-      return auth.slice(7);
-    }
-    // Also check for token in cookie
-    const cookie = req.headers.get('Cookie');
-    if (cookie) {
-      const match = cookie.match(/(?:^|;\s*)token=([^;]*)/);
-      if (match) {
-        return match[1];
+  const getToken =
+    options.getToken ||
+    ((req) => {
+      const auth = req.headers.get('Authorization');
+      if (auth?.startsWith('Bearer ')) {
+        return auth.slice(7);
       }
-    }
-    return null;
-  });
+      // Also check for token in cookie
+      const cookie = req.headers.get('Cookie');
+      if (cookie) {
+        const match = cookie.match(/(?:^|;\s*)token=([^;]*)/);
+        if (match) {
+          return match[1];
+        }
+      }
+      return null;
+    });
 
   return async (context, next) => {
     const { request } = context;
@@ -445,9 +442,8 @@ export function jwtAuth<Ctx = {}>(options: JwtAuthOptions<Ctx>): Middleware<Ctx>
     }
 
     try {
-      const secret = typeof options.secret === 'function'
-        ? options.secret(context)
-        : options.secret;
+      const secret =
+        typeof options.secret === 'function' ? options.secret(context) : options.secret;
 
       const payload = await jwtVerify(token, secret, { algorithms: options.algorithms });
 
@@ -463,7 +459,9 @@ export function jwtAuth<Ctx = {}>(options: JwtAuthOptions<Ctx>): Middleware<Ctx>
       const message = error instanceof Error ? error.message : 'Invalid token';
       return new Response(message, {
         status: 401,
-        headers: { 'WWW-Authenticate': `Bearer error="invalid_token", error_description="${message}"` },
+        headers: {
+          'WWW-Authenticate': `Bearer error="invalid_token", error_description="${message}"`,
+        },
       });
     }
   };
@@ -476,7 +474,10 @@ export function jwtAuth<Ctx = {}>(options: JwtAuthOptions<Ctx>): Middleware<Ctx>
 /** Bearer token authentication options. */
 export interface BearerAuthOptions {
   /** Function to validate the token. Returns claims to merge into context, or null to reject. */
-  verify: (token: string, context: MiddlewareContext) => Promise<Record<string, unknown> | null> | Record<string, unknown> | null;
+  verify: (
+    token: string,
+    context: MiddlewareContext,
+  ) => Promise<Record<string, unknown> | null> | Record<string, unknown> | null;
 }
 
 /**

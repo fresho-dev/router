@@ -2,14 +2,9 @@
  * @fileoverview Tests for core middleware functionality.
  */
 
-import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import {
-  type Middleware,
-  type MiddlewareContext,
-  runMiddleware,
-  compose,
-} from './middleware.js';
+import { beforeEach, describe, it } from 'node:test';
+import { compose, type Middleware, type MiddlewareContext, runMiddleware } from './middleware.js';
 
 describe('Middleware', () => {
   let context: MiddlewareContext;
@@ -17,7 +12,9 @@ describe('Middleware', () => {
   beforeEach(() => {
     context = {
       request: new Request('http://example.com/test'),
-      path: {}, query: {}, body: {},
+      path: {},
+      query: {},
+      body: {},
       env: {},
     };
   });
@@ -103,10 +100,7 @@ describe('Middleware', () => {
 
       const finalHandler = async () => new Response('ok');
 
-      await assert.rejects(
-        runMiddleware([middleware], context, finalHandler),
-        /middleware error/
-      );
+      await assert.rejects(runMiddleware([middleware], context, finalHandler), /middleware error/);
     });
 
     it('should handle empty middleware array', async () => {
@@ -168,7 +162,7 @@ describe('Middleware', () => {
       const response = await runMiddleware(
         [addHeaderMiddleware],
         context,
-        async () => new Response('ok')
+        async () => new Response('ok'),
       );
 
       assert.strictEqual(response.headers.get('X-Custom-Header'), 'test-value');
@@ -213,7 +207,7 @@ describe('Middleware', () => {
       const response = await runMiddleware(
         [middleware1, middleware2],
         context,
-        async () => new Response('ok')
+        async () => new Response('ok'),
       );
 
       assert.strictEqual(response.status, 500);
@@ -228,7 +222,7 @@ describe('Middleware', () => {
 
       await assert.rejects(
         runMiddleware([middleware], context, async () => new Response('ok')),
-        /Async error/
+        /Async error/,
       );
     });
   });

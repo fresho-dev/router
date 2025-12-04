@@ -1,5 +1,5 @@
-import { describe, it } from 'node:test';
 import assert from 'node:assert';
+import { describe, it } from 'node:test';
 import { compileSchema } from './schema.js';
 
 describe('schema', () => {
@@ -136,10 +136,7 @@ describe('schema', () => {
     });
 
     it('throws for invalid type', () => {
-      assert.throws(
-        () => compileSchema({ field: 'invalid_type' as 'string' }),
-        /Unknown type/
-      );
+      assert.throws(() => compileSchema({ field: 'invalid_type' as 'string' }), /Unknown type/);
     });
 
     it('validates unknown type', () => {

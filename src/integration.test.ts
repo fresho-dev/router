@@ -1,6 +1,6 @@
-import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { route, router, createLocalClient } from './index.js';
+import { describe, it } from 'node:test';
+import { createLocalClient, route, router } from './index.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -24,7 +24,10 @@ describe('integration tests', () => {
         query: { limit: 'number?' },
         handler: async (c) => {
           const limit = c.query.limit ?? 10;
-          const users = Array.from({ length: limit }, (_, i) => ({ id: i + 1, name: `User ${i + 1}` }));
+          const users = Array.from({ length: limit }, (_, i) => ({
+            id: i + 1,
+            name: `User ${i + 1}`,
+          }));
           return { users };
         },
       }),
@@ -83,7 +86,7 @@ describe('integration tests', () => {
       const client: AnyClient = createLocalClient(api);
       await assert.rejects(
         async () => client.users.post({ body: { name: 'Alice' } as never }),
-        /Invalid request body/
+        /Invalid request body/,
       );
     });
   });

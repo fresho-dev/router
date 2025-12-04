@@ -79,12 +79,11 @@ export type SchemaTypeMap = {
 type IsOptionalField<T> = T extends `${string}?` ? true : false;
 
 /** Infers TypeScript type from a schema field (type string or nested object). */
-export type InferSchemaField<T> =
-  T extends SchemaType
-    ? SchemaTypeMap[T]
-    : T extends SchemaDefinition
-      ? InferSchema<T>
-      : never;
+export type InferSchemaField<T> = T extends SchemaType
+  ? SchemaTypeMap[T]
+  : T extends SchemaDefinition
+    ? InferSchema<T>
+    : never;
 
 /** Gets keys of required fields (non-optional types). */
 type RequiredKeys<T extends SchemaDefinition> = {
@@ -135,17 +134,14 @@ function isNestedSchema(field: SchemaType | SchemaDefinition): field is SchemaDe
  * Validates and coerces a single primitive value.
  * Returns [success, result, errorMessage].
  */
-function validatePrimitive(
-  value: unknown,
-  baseType: string
-): [boolean, unknown, string | null] {
+function validatePrimitive(value: unknown, baseType: string): [boolean, unknown, string | null] {
   switch (baseType) {
     case 'string':
       return [true, String(value), null];
 
     case 'number': {
       const num = Number(value);
-      if (isNaN(num)) {
+      if (Number.isNaN(num)) {
         return [false, undefined, 'Expected number'];
       }
       return [true, num, null];
@@ -177,7 +173,7 @@ function validateField(
   key: string,
   field: SchemaType | SchemaDefinition,
   value: unknown,
-  parentPath: string = ''
+  parentPath: string = '',
 ): [boolean, unknown, Record<string, string[]>] {
   const fieldPath = parentPath ? `${parentPath}.${key}` : key;
   const errors: Record<string, string[]> = {};
@@ -250,7 +246,7 @@ function validateField(
 function validateSchema(
   schema: SchemaDefinition,
   data: Record<string, unknown>,
-  parentPath: string = ''
+  parentPath: string = '',
 ): { success: boolean; data: Record<string, unknown>; errors: Record<string, string[]> } {
   const result: Record<string, unknown> = {};
   const allErrors: Record<string, string[]> = {};
@@ -319,17 +315,18 @@ function validateSchemaDefinition(schema: SchemaDefinition, path: string = ''): 
  * ```
  */
 export function compileSchema<T extends SchemaDefinition>(
-  schema: T
+  schema: T,
 ): CompiledSchema<InferSchema<T>> {
   // Validate schema structure at compile time.
   validateSchemaDefinition(schema);
 
   return {
     safeParse(data: object): ValidationResult<InferSchema<T>> {
-      const { success, data: result, errors } = validateSchema(
-        schema,
-        data as Record<string, unknown>
-      );
+      const {
+        success,
+        data: result,
+        errors,
+      } = validateSchema(schema, data as Record<string, unknown>);
 
       if (!success) {
         return {

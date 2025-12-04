@@ -29,7 +29,7 @@ export interface CorsOptions {
  */
 function getAllowedOrigin(
   requestOrigin: string | null,
-  configOrigin: CorsOptions['origin']
+  configOrigin: CorsOptions['origin'],
 ): string {
   if (!requestOrigin) {
     return '*';
@@ -88,16 +88,16 @@ export function cors(options: CorsOptions = {}): Middleware {
       const headers: Record<string, string> = {
         'Access-Control-Allow-Origin': allowedOrigin,
         'Access-Control-Allow-Methods': config.methods.join(', '),
-        'Vary': 'Origin',
+        Vary: 'Origin',
       };
 
       if (config.allowedHeaders.length > 0) {
         const requestHeaders = request.headers.get('Access-Control-Request-Headers');
         if (requestHeaders) {
           // Allow requested headers if they're in the allowed list
-          const requested = requestHeaders.split(',').map(h => h.trim().toLowerCase());
-          const allowed = config.allowedHeaders.map(h => h.toLowerCase());
-          const toAllow = requested.filter(h => allowed.includes(h));
+          const requested = requestHeaders.split(',').map((h) => h.trim().toLowerCase());
+          const allowed = config.allowedHeaders.map((h) => h.toLowerCase());
+          const toAllow = requested.filter((h) => allowed.includes(h));
           if (toAllow.length > 0) {
             headers['Access-Control-Allow-Headers'] = toAllow.join(', ');
           }

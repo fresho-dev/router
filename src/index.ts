@@ -69,61 +69,54 @@
  * - `jwtVerify` - Verify JWT tokens
  */
 
-// Schema types and compilation.
-export {
-  type SchemaType,
-  type SchemaDefinition,
-  type SchemaTypeMap,
-  type InferSchema,
-  type ValidationResult,
-  type CompiledSchema,
-  compileSchema,
-} from './schema.js';
-
-// Core type definitions.
-export {
-  type Method,
-  type CollectPathParams,
-  type ExecutionContext,
-  type Context,
-  type TypedResponse,
-  type TypedHandler,
-  type RouteDefinition,
-  type MethodEntry,
-  type RouterRoutes,
-  type Router,
-  type RouterBrand,
-  type FetchHandler,
-  isRouter,
-  isRoute,
-  isFunction,
-} from './types.js';
-
-// HTTP client types.
-export {
-  type HttpClientConfig,
-  type HttpRequestOptions,
-  type HttpClient,
-} from './http-client.js';
-
-// Local client types.
-export {
-  type LocalClientConfig,
-  type LocalRequestOptions,
-  type LocalClient,
-} from './local-client.js';
-
 // Core functions.
 export { route, router } from './core.js';
-export { createHttpClient } from './http-client.js';
-export { createLocalClient } from './local-client.js';
-
 // Documentation generation.
 export { generateDocs } from './docs.js';
-
+// HTTP client types.
+export {
+  createHttpClient,
+  type HttpClient,
+  type HttpClientConfig,
+  type HttpRequestOptions,
+} from './http-client.js';
+// Local client types.
+export {
+  createLocalClient,
+  type LocalClient,
+  type LocalClientConfig,
+  type LocalRequestOptions,
+} from './local-client.js';
 // Middleware types and utilities (implementations available via 'typed-routes/middleware').
 export type { Middleware, MiddlewareContext, MiddlewareNext } from './middleware.js';
 export { runMiddleware } from './middleware.js';
-
+// Schema types and compilation.
+export {
+  type CompiledSchema,
+  compileSchema,
+  type InferSchema,
+  type SchemaDefinition,
+  type SchemaType,
+  type SchemaTypeMap,
+  type ValidationResult,
+} from './schema.js';
 // Streaming utilities.
-export { type SSEOptions, type SSEMessage, sseResponse, streamJsonLines } from './streaming.js';
+export { type SSEMessage, type SSEOptions, sseResponse, streamJsonLines } from './streaming.js';
+// Core type definitions.
+export {
+  type CollectPathParams,
+  type Context,
+  type ExecutionContext,
+  type FetchHandler,
+  isFunction,
+  isRoute,
+  isRouter,
+  type Method,
+  type MethodEntry,
+  type RouteDefinition,
+  type Router,
+  type RouterBrand,
+  type RouterRoutes,
+  type TypedHandler,
+  type TypedResponse,
+} from './types.js';

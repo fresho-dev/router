@@ -1,9 +1,16 @@
-import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { isRouter, isRoute, type CollectPathParams, type Router, type RouterRoutes, type RouterBrand } from './types.js';
+import { describe, it } from 'node:test';
 import { route, router } from './core.js';
 import { createHttpClient } from './http-client.js';
 import { createLocalClient } from './local-client.js';
+import {
+  type CollectPathParams,
+  isRoute,
+  isRouter,
+  type Router,
+  type RouterBrand,
+  type RouterRoutes,
+} from './types.js';
 
 describe('types', () => {
   describe('isRouter()', () => {

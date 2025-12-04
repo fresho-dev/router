@@ -88,7 +88,7 @@ function formatSSEMessage(message: SSEMessage): string {
     lines.push(`data: ${line}`);
   }
 
-  return lines.join('\n') + '\n\n';
+  return `${lines.join('\n')}\n\n`;
 }
 
 /**
@@ -108,11 +108,8 @@ function formatSSEMessage(message: SSEMessage): string {
  * ```
  */
 export function sseResponse(
-  handler: (
-    send: (message: SSEMessage) => void,
-    close: () => void
-  ) => void | Promise<void>,
-  options: SSEOptions = {}
+  handler: (send: (message: SSEMessage) => void, close: () => void) => void | Promise<void>,
+  options: SSEOptions = {},
 ): Response {
   const encoder = new TextEncoder();
   let isClosed = false;
@@ -187,11 +184,8 @@ export function sseResponse(
  * ```
  */
 export function streamJsonLines(
-  handler: (
-    send: (data: object) => void,
-    close: () => void
-  ) => void | Promise<void>,
-  options: { headers?: HeadersInit } = {}
+  handler: (send: (data: object) => void, close: () => void) => void | Promise<void>,
+  options: { headers?: HeadersInit } = {},
 ): Response {
   const encoder = new TextEncoder();
   let isClosed = false;
@@ -200,7 +194,7 @@ export function streamJsonLines(
     async start(controller) {
       const send = (data: object) => {
         if (!isClosed) {
-          controller.enqueue(encoder.encode(JSON.stringify(data) + '\n'));
+          controller.enqueue(encoder.encode(`${JSON.stringify(data)}\n`));
         }
       };
 

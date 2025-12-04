@@ -7,12 +7,18 @@
  * - `get`, `post`, etc. = method handlers
  */
 
-import type { Router, RouterRoutes, ExecutionContext, FetchHandler, RouteDefinition } from './types.js';
-import type { CompiledSchema } from './schema.js';
 import type { Middleware, MiddlewareContext } from './middleware.js';
-import { isRouter, isRoute, isFunction, HTTP_METHODS } from './types.js';
-import { compileSchema } from './schema.js';
 import { runMiddleware } from './middleware.js';
+import type { CompiledSchema } from './schema.js';
+import { compileSchema } from './schema.js';
+import type {
+  ExecutionContext,
+  FetchHandler,
+  RouteDefinition,
+  Router,
+  RouterRoutes,
+} from './types.js';
+import { HTTP_METHODS, isFunction, isRoute, isRouter } from './types.js';
 
 /** Compiled route with pattern matcher and handler. */
 interface CompiledRoute {
@@ -63,7 +69,7 @@ function pathToRegex(path: string): { pattern: RegExp; paramNames: string[] } {
  */
 function propertyToSegment(prop: string): string {
   if (prop.startsWith('$')) {
-    return ':' + prop.slice(1);
+    return `:${prop.slice(1)}`;
   }
   return prop;
 }
@@ -72,7 +78,7 @@ function propertyToSegment(prop: string): string {
 function compileRoutes(
   routerDef: Router<RouterRoutes>,
   parentPath = '',
-  parentMiddleware: Middleware[] = []
+  parentMiddleware: Middleware[] = [],
 ): CompiledRoute[] {
   const currentMiddleware = [...parentMiddleware, ...(routerDef.middleware || [])];
   const compiled: CompiledRoute[] = [];
@@ -151,16 +157,10 @@ function stripBodyForHead(response: Response, isHead: boolean): Response {
  * export default { fetch: api.handler() };
  * ```
  */
-export function createHandler<T extends RouterRoutes>(
-  routerDef: Router<T>
-): FetchHandler {
+export function createHandler<T extends RouterRoutes>(routerDef: Router<T>): FetchHandler {
   const compiledRoutes = compileRoutes(routerDef);
 
-  return async (
-    request: Request,
-    env?: unknown,
-    ctx?: ExecutionContext
-  ): Promise<Response> => {
+  return async (request: Request, env?: unknown, ctx?: ExecutionContext): Promise<Response> => {
     const url = new URL(request.url);
     const method = request.method.toUpperCase();
     const isHead = method === 'HEAD';
@@ -193,7 +193,12 @@ export function createHandler<T extends RouterRoutes>(
       };
 
       // Run middleware and handler.
-      if (compiled.middleware.length > 0 || compiled.handler || compiled.querySchema || compiled.bodySchema) {
+      if (
+        compiled.middleware.length > 0 ||
+        compiled.handler ||
+        compiled.querySchema ||
+        compiled.bodySchema
+      ) {
         const response = await runMiddleware(compiled.middleware, context, async () => {
           const routeId = `${compiled.method} ${url.pathname}`;
 
@@ -204,8 +209,12 @@ export function createHandler<T extends RouterRoutes>(
             const result = compiled.querySchema.safeParse(raw);
             if (!result.success) {
               return Response.json(
-                { error: 'Invalid query parameters', route: routeId, details: result.error.flatten() },
-                { status: 400 }
+                {
+                  error: 'Invalid query parameters',
+                  route: routeId,
+                  details: result.error.flatten(),
+                },
+                { status: 400 },
               );
             }
             query = result.data;
@@ -219,7 +228,7 @@ export function createHandler<T extends RouterRoutes>(
             if (!result.success) {
               return Response.json(
                 { error: 'Invalid request body', route: routeId, details: result.error.flatten() },
-                { status: 400 }
+                { status: 400 },
               );
             }
             body = result.data;
@@ -242,7 +251,9 @@ export function createHandler<T extends RouterRoutes>(
             // Copy middleware extensions.
             for (const key of Object.keys(context)) {
               if (!['request', 'path', 'query', 'body', 'env', 'executionCtx'].includes(key)) {
-                (handlerContext as Record<string, unknown>)[key] = (context as Record<string, unknown>)[key];
+                (handlerContext as Record<string, unknown>)[key] = (
+                  context as Record<string, unknown>
+                )[key];
               }
             }
 

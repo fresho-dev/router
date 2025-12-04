@@ -2,10 +2,10 @@
  * @fileoverview Tests for CORS middleware.
  */
 
-import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { cors } from './cors.js';
+import { beforeEach, describe, it } from 'node:test';
 import type { MiddlewareContext } from '../middleware.js';
+import { cors } from './cors.js';
 
 describe('CORS Middleware', () => {
   let context: MiddlewareContext;
@@ -17,7 +17,9 @@ describe('CORS Middleware', () => {
     nextResponse = new Response('test response');
     context = {
       request: new Request('http://example.com/test'),
-      path: {}, query: {}, body: {},
+      path: {},
+      query: {},
+      body: {},
       env: {},
     };
   });
@@ -32,7 +34,7 @@ describe('CORS Middleware', () => {
       context.request = new Request('http://example.com/test', {
         method: 'OPTIONS',
         headers: {
-          'Origin': 'http://localhost:3000',
+          Origin: 'http://localhost:3000',
         },
       });
 
@@ -43,11 +45,11 @@ describe('CORS Middleware', () => {
       assert.strictEqual(response.headers.get('Access-Control-Allow-Origin'), '*');
       assert.strictEqual(
         response.headers.get('Access-Control-Allow-Methods'),
-        'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD'
+        'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD',
       );
       assert.strictEqual(
         response.headers.get('Access-Control-Allow-Headers'),
-        'Content-Type, Authorization'
+        'Content-Type, Authorization',
       );
       assert.strictEqual(response.headers.get('Access-Control-Max-Age'), '86400');
       assert.strictEqual(nextCalled, false);
@@ -57,14 +59,17 @@ describe('CORS Middleware', () => {
       context.request = new Request('http://example.com/test', {
         method: 'OPTIONS',
         headers: {
-          'Origin': 'https://example.com',
+          Origin: 'https://example.com',
         },
       });
 
       const middleware = cors({ origin: 'https://example.com' });
       const response = await middleware(context, next);
 
-      assert.strictEqual(response.headers.get('Access-Control-Allow-Origin'), 'https://example.com');
+      assert.strictEqual(
+        response.headers.get('Access-Control-Allow-Origin'),
+        'https://example.com',
+      );
     });
 
     it('should handle origin array', async () => {
@@ -74,19 +79,22 @@ describe('CORS Middleware', () => {
       context.request = new Request('http://example.com/test', {
         method: 'OPTIONS',
         headers: {
-          'Origin': 'https://example.com',
+          Origin: 'https://example.com',
         },
       });
 
       let middleware = cors({ origin: allowedOrigins });
       let response = await middleware(context, next);
-      assert.strictEqual(response.headers.get('Access-Control-Allow-Origin'), 'https://example.com');
+      assert.strictEqual(
+        response.headers.get('Access-Control-Allow-Origin'),
+        'https://example.com',
+      );
 
       // Test disallowed origin
       context.request = new Request('http://example.com/test', {
         method: 'OPTIONS',
         headers: {
-          'Origin': 'https://evil.com',
+          Origin: 'https://evil.com',
         },
       });
 
@@ -102,18 +110,21 @@ describe('CORS Middleware', () => {
       context.request = new Request('http://example.com/test', {
         method: 'OPTIONS',
         headers: {
-          'Origin': 'https://app.example.com',
+          Origin: 'https://app.example.com',
         },
       });
 
       let response = await middleware(context, next);
-      assert.strictEqual(response.headers.get('Access-Control-Allow-Origin'), 'https://app.example.com');
+      assert.strictEqual(
+        response.headers.get('Access-Control-Allow-Origin'),
+        'https://app.example.com',
+      );
 
       // Test non-matching origin
       context.request = new Request('http://example.com/test', {
         method: 'OPTIONS',
         headers: {
-          'Origin': 'https://example.org',
+          Origin: 'https://example.org',
         },
       });
 
@@ -130,18 +141,21 @@ describe('CORS Middleware', () => {
       context.request = new Request('http://example.com/test', {
         method: 'OPTIONS',
         headers: {
-          'Origin': 'https://app.example.com',
+          Origin: 'https://app.example.com',
         },
       });
 
       let response = await middleware(context, next);
-      assert.strictEqual(response.headers.get('Access-Control-Allow-Origin'), 'https://app.example.com');
+      assert.strictEqual(
+        response.headers.get('Access-Control-Allow-Origin'),
+        'https://app.example.com',
+      );
 
       // Test disallowed origin
       context.request = new Request('http://example.com/test', {
         method: 'OPTIONS',
         headers: {
-          'Origin': 'https://evil.com',
+          Origin: 'https://evil.com',
         },
       });
 
@@ -153,7 +167,7 @@ describe('CORS Middleware', () => {
       context.request = new Request('http://example.com/test', {
         method: 'OPTIONS',
         headers: {
-          'Origin': 'https://example.com',
+          Origin: 'https://example.com',
         },
       });
 
@@ -170,7 +184,7 @@ describe('CORS Middleware', () => {
       context.request = new Request('http://example.com/test', {
         method: 'OPTIONS',
         headers: {
-          'Origin': 'https://example.com',
+          Origin: 'https://example.com',
         },
       });
 
@@ -183,14 +197,17 @@ describe('CORS Middleware', () => {
 
       assert.strictEqual(response.headers.get('Access-Control-Allow-Methods'), 'GET, POST');
       assert.strictEqual(response.headers.get('Access-Control-Allow-Headers'), 'X-Custom-Header');
-      assert.strictEqual(response.headers.get('Access-Control-Expose-Headers'), 'X-Response-Header');
+      assert.strictEqual(
+        response.headers.get('Access-Control-Expose-Headers'),
+        'X-Response-Header',
+      );
     });
 
     it('should handle Access-Control-Request-Headers', async () => {
       context.request = new Request('http://example.com/test', {
         method: 'OPTIONS',
         headers: {
-          'Origin': 'https://example.com',
+          Origin: 'https://example.com',
           'Access-Control-Request-Headers': 'Content-Type, X-Custom',
         },
       });
@@ -201,14 +218,17 @@ describe('CORS Middleware', () => {
       const response = await middleware(context, next);
 
       // Should only allow headers that are both requested and allowed
-      assert.strictEqual(response.headers.get('Access-Control-Allow-Headers'), 'content-type, x-custom');
+      assert.strictEqual(
+        response.headers.get('Access-Control-Allow-Headers'),
+        'content-type, x-custom',
+      );
     });
 
     it('should handle preflightContinue option', async () => {
       context.request = new Request('http://example.com/test', {
         method: 'OPTIONS',
         headers: {
-          'Origin': 'https://example.com',
+          Origin: 'https://example.com',
         },
       });
 
@@ -230,7 +250,7 @@ describe('CORS Middleware', () => {
       context.request = new Request('http://example.com/test', {
         method: 'GET',
         headers: {
-          'Origin': 'https://example.com',
+          Origin: 'https://example.com',
         },
       });
 
@@ -246,21 +266,24 @@ describe('CORS Middleware', () => {
       context.request = new Request('http://example.com/test', {
         method: 'POST',
         headers: {
-          'Origin': 'https://example.com',
+          Origin: 'https://example.com',
         },
       });
 
       const middleware = cors({ origin: 'https://example.com' });
       const response = await middleware(context, next);
 
-      assert.strictEqual(response.headers.get('Access-Control-Allow-Origin'), 'https://example.com');
+      assert.strictEqual(
+        response.headers.get('Access-Control-Allow-Origin'),
+        'https://example.com',
+      );
     });
 
     it('should add credentials header when enabled', async () => {
       context.request = new Request('http://example.com/test', {
         method: 'GET',
         headers: {
-          'Origin': 'https://example.com',
+          Origin: 'https://example.com',
         },
       });
 
@@ -277,7 +300,7 @@ describe('CORS Middleware', () => {
       context.request = new Request('http://example.com/test', {
         method: 'GET',
         headers: {
-          'Origin': 'https://example.com',
+          Origin: 'https://example.com',
         },
       });
 
@@ -294,7 +317,7 @@ describe('CORS Middleware', () => {
       context.request = new Request('http://example.com/test', {
         method: 'GET',
         headers: {
-          'Origin': 'https://example.com',
+          Origin: 'https://example.com',
         },
       });
 
@@ -305,7 +328,7 @@ describe('CORS Middleware', () => {
 
       assert.strictEqual(
         response.headers.get('Access-Control-Expose-Headers'),
-        'X-Total-Count, X-Page-Number'
+        'X-Total-Count, X-Page-Number',
       );
     });
 
@@ -313,7 +336,7 @@ describe('CORS Middleware', () => {
       context.request = new Request('http://example.com/test', {
         method: 'GET',
         headers: {
-          'Origin': 'https://example.com',
+          Origin: 'https://example.com',
         },
       });
 
@@ -350,7 +373,7 @@ describe('CORS Middleware', () => {
       context.request = new Request('http://example.com/test', {
         method: 'GET',
         headers: {
-          'Origin': 'https://example.com',
+          Origin: 'https://example.com',
         },
       });
 
@@ -366,7 +389,7 @@ describe('CORS Middleware', () => {
         context.request = new Request('http://example.com/test', {
           method,
           headers: {
-            'Origin': 'https://example.com',
+            Origin: 'https://example.com',
           },
         });
 
@@ -376,7 +399,7 @@ describe('CORS Middleware', () => {
         assert.strictEqual(
           response.headers.get('Access-Control-Allow-Origin'),
           '*',
-          `Should add CORS headers for ${method}`
+          `Should add CORS headers for ${method}`,
         );
       }
     });

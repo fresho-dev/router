@@ -1,5 +1,5 @@
-import { describe, it } from 'node:test';
 import assert from 'node:assert';
+import { describe, it } from 'node:test';
 import { route, router } from './core.js';
 import { createLocalClient } from './local-client.js';
 
@@ -18,7 +18,7 @@ describe('local-client', () => {
         router({
           users: router({ get: async () => [] }),
           posts: router({ get: async () => [] }),
-        })
+        }),
       );
 
       assert.strictEqual(typeof client.users, 'function');
@@ -41,7 +41,7 @@ describe('local-client', () => {
           test: router({
             get: async () => Response.json({ message: 'hello' }),
           }),
-        })
+        }),
       );
 
       const result = await client.test();
@@ -54,7 +54,7 @@ describe('local-client', () => {
           test: router({
             get: async () => ({ message: 'hello' }),
           }),
-        })
+        }),
       );
 
       const result = await client.test();
@@ -67,7 +67,7 @@ describe('local-client', () => {
           test: router({
             get: async () => ({ message: 'hello' }),
           }),
-        })
+        }),
       );
 
       const result = await client.test.get();
@@ -83,7 +83,7 @@ describe('local-client', () => {
               handler: async (c) => ({ name: c.body.name }),
             }),
           }),
-        })
+        }),
       );
 
       const result = await client.test.post({ body: { name: 'bob' } });
@@ -99,7 +99,7 @@ describe('local-client', () => {
               handler: async (c) => Response.json({ name: c.query.name }),
             }),
           }),
-        })
+        }),
       );
 
       const result = await client.test({ query: { name: 'alice' } });
@@ -115,7 +115,7 @@ describe('local-client', () => {
               handler: async (c) => Response.json({ name: c.body.name }),
             }),
           }),
-        })
+        }),
       );
 
       const result = await client.test.post({ body: { name: 'bob' } });
@@ -131,12 +131,12 @@ describe('local-client', () => {
               handler: async () => Response.json({}),
             }),
           }),
-        })
+        }),
       );
 
       await assert.rejects(
         async () => client.test({ query: { count: 'not-a-number' as unknown as number } }),
-        /Invalid query parameters/
+        /Invalid query parameters/,
       );
     });
 
@@ -149,12 +149,12 @@ describe('local-client', () => {
               handler: async () => Response.json({}),
             }),
           }),
-        })
+        }),
       );
 
       await assert.rejects(
         async () => client.test.post({ body: {} as never }),
-        /Invalid request body/
+        /Invalid request body/,
       );
     });
 
@@ -164,7 +164,7 @@ describe('local-client', () => {
           test: router({
             get: async (c) => Response.json({ hasEnv: c.env !== undefined }),
           }),
-        })
+        }),
       );
 
       const result = await client.test({ env: { DB: 'test' } });
@@ -177,7 +177,7 @@ describe('local-client', () => {
           test: router({
             get: async (c) => Response.json({ hasCtx: c.executionCtx !== undefined }),
           }),
-        })
+        }),
       );
 
       const mockCtx = { waitUntil: () => {}, passThroughOnException: () => {} };
@@ -192,7 +192,7 @@ describe('local-client', () => {
             get: async (c) =>
               Response.json({ hasEnv: c.env !== undefined, hasCtx: c.executionCtx !== undefined }),
           }),
-        })
+        }),
       );
 
       const mockCtx = { waitUntil: () => {}, passThroughOnException: () => {} };
@@ -213,7 +213,7 @@ describe('local-client', () => {
               handler: async (c) => Response.json({ db: c.env.DB }),
             }),
           }),
-        })
+        }),
       );
 
       client.configure({ env: { DB: 'default' } });
@@ -227,7 +227,7 @@ describe('local-client', () => {
           test: router({
             get: async () => ({}),
           }),
-        })
+        }),
       );
 
       const result = await client.test();
@@ -249,7 +249,7 @@ describe('local-client', () => {
               }),
             }),
           }),
-        })
+        }),
       );
 
       await client.api.test({ query: { id: '123' } });
@@ -267,7 +267,7 @@ describe('local-client', () => {
               return Response.json({});
             },
           }),
-        })
+        }),
       );
 
       await client.test.post();
@@ -305,7 +305,9 @@ describe('local-client', () => {
       });
 
       const client: AnyClient = createLocalClient(api);
-      const result = (await client.users.$userId.posts.$postId({ path: { userId: 'u1', postId: 'p42' } })) as {
+      const result = (await client.users.$userId.posts.$postId({
+        path: { userId: 'u1', postId: 'p42' },
+      })) as {
         userId: string;
         postId: string;
       };
@@ -326,7 +328,7 @@ describe('local-client', () => {
       await assert.rejects(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         () => client.users.$id({ path: {} } as any),
-        /Missing path parameter: id/
+        /Missing path parameter: id/,
       );
     });
 
@@ -372,7 +374,10 @@ describe('local-client', () => {
       });
 
       const client: AnyClient = createLocalClient(api);
-      const result = (await client.users.$userId.posts({ path: { userId: 'u1' }, query: { limit: 5 } })) as {
+      const result = (await client.users.$userId.posts({
+        path: { userId: 'u1' },
+        query: { limit: 5 },
+      })) as {
         userId: string;
         limit: number;
       };

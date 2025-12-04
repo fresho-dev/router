@@ -1,6 +1,6 @@
 #!/usr/bin/env -S npx tsx
 
-import esbuild from "esbuild";
+import esbuild from 'esbuild';
 
 // Build with readable output to see what's included.
 const result = await esbuild.build({
@@ -13,17 +13,17 @@ const result = await esbuild.build({
       export default { fetch: api.handler() };
     `,
     resolveDir: process.cwd(),
-    loader: "ts",
+    loader: 'ts',
   },
   bundle: true,
   minify: false,
-  format: "esm",
+  format: 'esm',
   write: false,
-  platform: "browser",
+  platform: 'browser',
 });
 
 const code = result.outputFiles[0].text;
-console.log("Unminified bundle size:", (code.length / 1024).toFixed(1), "KB");
-console.log("");
-console.log("=== BUNDLE CONTENTS ===");
+console.log('Unminified bundle size:', (code.length / 1024).toFixed(1), 'KB');
+console.log('');
+console.log('=== BUNDLE CONTENTS ===');
 console.log(code);

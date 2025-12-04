@@ -1,6 +1,6 @@
-import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { route, router } from './core.js';
+import { describe, it } from 'node:test';
+import { router } from './core.js';
 import { createHttpClient } from './http-client.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -54,8 +54,10 @@ describe('http-client', () => {
 
     describe('fetch behavior', () => {
       it('builds path from property chain', async (t) => {
-        const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
-          new Response(JSON.stringify({}))
+        const fetchMock = t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({})),
         );
 
         // Use any for proxy-based tests without a specific router type.
@@ -69,8 +71,10 @@ describe('http-client', () => {
       });
 
       it('substitutes $param path params in URL', async (t) => {
-        const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
-          new Response(JSON.stringify({}))
+        const fetchMock = t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({})),
         );
 
         const api = router({
@@ -88,8 +92,10 @@ describe('http-client', () => {
       });
 
       it('adds query params to URL', async (t) => {
-        const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
-          new Response(JSON.stringify({}))
+        const fetchMock = t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({})),
         );
 
         const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
@@ -102,8 +108,10 @@ describe('http-client', () => {
       });
 
       it('omits undefined query params', async (t) => {
-        const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
-          new Response(JSON.stringify({}))
+        const fetchMock = t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({})),
         );
 
         const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
@@ -116,8 +124,10 @@ describe('http-client', () => {
       });
 
       it('works without baseUrl (relative paths)', async (t) => {
-        const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
-          new Response(JSON.stringify({}))
+        const fetchMock = t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({})),
         );
 
         const client: AnyClient = createHttpClient({});
@@ -129,8 +139,10 @@ describe('http-client', () => {
       });
 
       it('sends configured headers', async (t) => {
-        const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
-          new Response(JSON.stringify({}))
+        const fetchMock = t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({})),
         );
 
         const client: AnyClient = createHttpClient({
@@ -146,8 +158,10 @@ describe('http-client', () => {
       });
 
       it('sends per-request headers', async (t) => {
-        const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
-          new Response(JSON.stringify({}))
+        const fetchMock = t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({})),
         );
 
         const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
@@ -160,8 +174,10 @@ describe('http-client', () => {
       });
 
       it('per-request headers override configured headers', async (t) => {
-        const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
-          new Response(JSON.stringify({}))
+        const fetchMock = t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({})),
         );
 
         const client: AnyClient = createHttpClient({
@@ -177,8 +193,10 @@ describe('http-client', () => {
       });
 
       it('supports dynamic header functions', async (t) => {
-        const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
-          new Response(JSON.stringify({}))
+        const fetchMock = t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({})),
         );
 
         let tokenValue = 'token-1';
@@ -204,8 +222,10 @@ describe('http-client', () => {
       });
 
       it('skips dynamic headers that return null or undefined', async (t) => {
-        const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
-          new Response(JSON.stringify({}))
+        const fetchMock = t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({})),
         );
 
         let token: string | null = null;
@@ -229,8 +249,10 @@ describe('http-client', () => {
       });
 
       it('supports async header functions', async (t) => {
-        const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
-          new Response(JSON.stringify({}))
+        const fetchMock = t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({})),
         );
 
         const getToken = async () => {
@@ -252,8 +274,10 @@ describe('http-client', () => {
       });
 
       it('sends credentials mode when configured', async (t) => {
-        const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
-          new Response(JSON.stringify({}))
+        const fetchMock = t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({})),
         );
 
         const client: AnyClient = createHttpClient({
@@ -268,8 +292,10 @@ describe('http-client', () => {
       });
 
       it('sets Content-Type for POST with body', async (t) => {
-        const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
-          new Response(JSON.stringify({}))
+        const fetchMock = t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({})),
         );
 
         const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
@@ -282,8 +308,10 @@ describe('http-client', () => {
       });
 
       it('sends JSON body for POST', async (t) => {
-        const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
-          new Response(JSON.stringify({}))
+        const fetchMock = t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({})),
         );
 
         const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
@@ -295,8 +323,10 @@ describe('http-client', () => {
       });
 
       it('parses JSON response', async (t) => {
-        t.mock.method(globalThis, 'fetch', async () =>
-          new Response(JSON.stringify({ result: 'success' }))
+        t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({ result: 'success' })),
         );
 
         const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
@@ -314,8 +344,10 @@ describe('http-client', () => {
       });
 
       it('uses correct HTTP method via .$get(), .$post(), etc.', async (t) => {
-        const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
-          new Response(JSON.stringify({}))
+        const fetchMock = t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({})),
         );
 
         const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
@@ -337,8 +369,10 @@ describe('http-client', () => {
       });
 
       it('lowercase method names navigate to path segments', async (t) => {
-        const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
-          new Response(JSON.stringify({}))
+        const fetchMock = t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({})),
         );
 
         // Route structure: GET /resources/get, GET /resources/delete
@@ -358,13 +392,18 @@ describe('http-client', () => {
 
         // Navigate to /resources/delete and execute GET.
         await client.resources.delete.$get();
-        assert.strictEqual(fetchMock.mock.calls[1].arguments[0], 'http://test.com/resources/delete');
+        assert.strictEqual(
+          fetchMock.mock.calls[1].arguments[0],
+          'http://test.com/resources/delete',
+        );
         assert.strictEqual((fetchMock.mock.calls[1].arguments[1] as RequestInit).method, 'GET');
       });
 
       it('direct call uses GET method', async (t) => {
-        const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
-          new Response(JSON.stringify({}))
+        const fetchMock = t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({})),
         );
 
         const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
@@ -375,8 +414,10 @@ describe('http-client', () => {
       });
 
       it('appends multiple path params in order', async (t) => {
-        const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
-          new Response(JSON.stringify({}))
+        const fetchMock = t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({})),
         );
 
         const api = router({
@@ -400,8 +441,10 @@ describe('http-client', () => {
       });
 
       it('encodes path params', async (t) => {
-        const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
-          new Response(JSON.stringify({}))
+        const fetchMock = t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({})),
         );
 
         const api = router({
