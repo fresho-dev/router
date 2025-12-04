@@ -1,5 +1,5 @@
 /**
- * @fileoverview Authentication middleware for typed-routes.
+ * @fileoverview Authentication middleware for @fresho/router.
  *
  * Provides Basic HTTP and JWT authentication middleware.
  */
@@ -174,7 +174,7 @@ export interface JwtAuthOptions<Ctx = {}> {
  *
  * @example
  * ```typescript
- * import { jwtVerify } from 'typed-routes/middleware';
+ * import { jwtVerify } from '@fresho/router/middleware';
  *
  * try {
  *   const payload = await jwtVerify(token, 'your-secret-key');

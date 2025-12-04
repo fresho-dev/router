@@ -1,5 +1,5 @@
 /**
- * @fileoverview CORS middleware for typed-routes.
+ * @fileoverview CORS middleware for @fresho/router.
  *
  * Provides Cross-Origin Resource Sharing support with configurable options.
  */

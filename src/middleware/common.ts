@@ -1,5 +1,5 @@
 /**
- * @fileoverview Common middleware utilities for typed-routes.
+ * @fileoverview Common middleware utilities for @fresho/router.
  *
  * Provides error handling, logging, rate limiting, and other utilities.
  */
@@ -18,7 +18,7 @@ import type { Middleware, MiddlewareContext } from '../middleware.js';
  *
  * @example
  * ```typescript
- * import { HttpError } from 'typed-routes/middleware';
+ * import { HttpError } from '@fresho/router/middleware';
  *
  * const getUser = route({
  *   method: 'get',

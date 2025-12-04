@@ -1,6 +1,6 @@
 # Middleware
 
-typed-routes provides a composable middleware system for request/response processing. Middleware can handle cross-cutting concerns like authentication, logging, CORS, and rate limiting.
+@fresho/router provides a composable middleware system for request/response processing. Middleware can handle cross-cutting concerns like authentication, logging, CORS, and rate limiting.
 
 ## Table of Contents
 
@@ -32,7 +32,7 @@ Middleware functions receive a context and a `next` function. They can:
 - Add properties to the context for downstream middleware and handlers
 
 ```typescript
-import type { Middleware } from 'typed-routes';
+import type { Middleware } from '@fresho/router';
 
 const timing: Middleware = async (ctx, next) => {
   const start = Date.now();
@@ -46,8 +46,8 @@ const timing: Middleware = async (ctx, next) => {
 Add middleware to a router after the routes:
 
 ```typescript
-import { router } from 'typed-routes';
-import { cors, errorHandler } from 'typed-routes/middleware';
+import { router } from '@fresho/router';
+import { cors, errorHandler } from '@fresho/router/middleware';
 
 const api = router({
   hello: router({
@@ -65,7 +65,7 @@ const api = router({
 A middleware is a function that takes `(context, next)` and returns a `Response`:
 
 ```typescript
-import type { Middleware, MiddlewareContext, MiddlewareNext } from 'typed-routes';
+import type { Middleware, MiddlewareContext, MiddlewareNext } from '@fresho/router';
 
 const logger: Middleware = async (ctx: MiddlewareContext, next: MiddlewareNext) => {
   console.log(`${ctx.request.method} ${ctx.request.url}`);
@@ -125,7 +125,7 @@ The `route.ctx<T>()` builder tells TypeScript what context properties the handle
 
 ## Built-in Middleware
 
-Import from `typed-routes/middleware`:
+Import from `@fresho/router/middleware`:
 
 ```typescript
 import {
@@ -142,14 +142,14 @@ import {
   requestId,
   timeout,
   contentType,
-} from 'typed-routes/middleware';
+} from '@fresho/router/middleware';
 ```
 
 ---
 
 ### Authentication
 
-typed-routes includes several authentication middleware options:
+@fresho/router includes several authentication middleware options:
 
 - **`basicAuth`** - HTTP Basic authentication
 - **`bearerAuth`** - Simple bearer token authentication
@@ -161,7 +161,7 @@ For complete documentation, examples, and patterns (cookie-based auth, token ref
 Quick example:
 
 ```typescript
-import { jwtAuth } from 'typed-routes/middleware';
+import { jwtAuth } from '@fresho/router/middleware';
 
 const api = router({
   profile: router({
@@ -249,8 +249,8 @@ Supports errors with `status` or `statusCode` properties for custom HTTP status 
 Use the `HttpError` class to throw errors with specific status codes:
 
 ```typescript
-import { route, router } from 'typed-routes';
-import { errorHandler, HttpError } from 'typed-routes/middleware';
+import { route, router } from '@fresho/router';
+import { errorHandler, HttpError } from '@fresho/router/middleware';
 
 const api = router({
   users: router({
@@ -420,7 +420,7 @@ Returns 415 Unsupported Media Type on mismatch.
 Combines multiple middleware into a single middleware:
 
 ```typescript
-import { compose } from 'typed-routes/middleware';
+import { compose } from '@fresho/router/middleware';
 
 const security = compose(
   cors(),

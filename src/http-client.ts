@@ -1,5 +1,5 @@
 /**
- * @fileoverview HTTP client for typed-routes.
+ * @fileoverview HTTP client for @fresho/router.
  *
  * Provides a typed HTTP client using type-only imports.
  * URLs are built from property access chains:
@@ -15,7 +15,7 @@
  * ```typescript
  * // Type-only import - no server code in bundle!
  * import type { api } from './server/api.js';
- * import { createHttpClient } from 'typed-routes';
+ * import { createHttpClient } from '@fresho/router';
  *
  * const client = createHttpClient<typeof api>({
  *   baseUrl: 'https://api.example.com',
@@ -87,12 +87,26 @@ type ExtractReturn<T> = T extends (...args: unknown[]) => infer R
     : R
   : unknown;
 
+/** Detects if a type is `any`. */
+type IsAny<T> = 0 extends 1 & T ? true : false;
+
+/** Checks if a schema type should require a property. */
+type RequiresProperty<T> = IsAny<T> extends true ? false : keyof T extends never ? false : true;
+
 /** Build options type based on whether path params are needed. */
 type BuildOptions<HasPathParams extends boolean, Q, B> = HasPathParams extends true
-  ? { path: Record<string, string> } & (keyof Q extends never ? {} : { query?: Q }) &
-      (keyof B extends never ? {} : { body: B }) & { headers?: HeadersInit }
-  : (keyof Q extends never ? {} : { query?: Q }) &
-      (keyof B extends never ? {} : { body: B }) & { headers?: HeadersInit };
+  ? { path: Record<string, string> } & (RequiresProperty<Q> extends true ? { query?: Q } : {}) &
+      (RequiresProperty<B> extends true ? { body: B } : {}) & { headers?: HeadersInit }
+  : (RequiresProperty<Q> extends true ? { query?: Q } : {}) &
+      (RequiresProperty<B> extends true ? { body: B } : {}) & { headers?: HeadersInit };
+
+/** Safely infer schema, returning {} for any or non-schema types. */
+type SafeInferSchema<T> =
+  IsAny<T> extends true
+    ? {}
+    : T extends import('./schema.js').SchemaDefinition
+      ? InferSchema<T>
+      : {};
 
 /** Client type for a method entry (route or bare function). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -103,7 +117,7 @@ type MethodClient<T, HasPathParams extends boolean = false> = T extends RouteDef
   any,
   any
 >
-  ? (options?: BuildOptions<HasPathParams, InferSchema<Q>, InferSchema<B>>) => Promise<R>
+  ? (options?: BuildOptions<HasPathParams, SafeInferSchema<Q>, SafeInferSchema<B>>) => Promise<R>
   : T extends (...args: unknown[]) => unknown
     ? (options?: BuildOptions<HasPathParams, {}, {}>) => Promise<ExtractReturn<T>>
     : never;
@@ -191,7 +205,7 @@ const HTTP_METHODS = new Set(['$get', '$post', '$put', '$patch', '$delete', '$op
  * @example
  * ```typescript
  * import type { api } from './server';
- * import { createHttpClient } from 'typed-routes';
+ * import { createHttpClient } from '@fresho/router';
  *
  * const client = createHttpClient<typeof api>({
  *   baseUrl: 'https://api.example.com',

@@ -1,12 +1,12 @@
 /**
- * @fileoverview Local client for typed-routes.
+ * @fileoverview Local client for @fresho/router.
  *
  * Provides a typed client that invokes route handlers directly without HTTP.
  * Uses the same API as createHttpClient for consistency.
  *
  * @example
  * ```typescript
- * import { createLocalClient } from 'typed-routes';
+ * import { createLocalClient } from '@fresho/router';
  * import { api } from './api.js';
  *
  * const client = createLocalClient(api);
@@ -21,14 +21,7 @@
 
 import type { InferSchema } from './schema.js';
 import { compileSchema } from './schema.js';
-import type {
-  ExecutionContext,
-  Method,
-  RouteDefinition,
-  Router,
-  RouterBrand,
-  RouterRoutes,
-} from './types.js';
+import type { ExecutionContext, Method, RouteDefinition, Router, RouterRoutes } from './types.js';
 import { HTTP_METHODS, isFunction, isRoute, isRouter } from './types.js';
 
 // =============================================================================
@@ -62,20 +55,37 @@ type ExtractReturn<T> = T extends (...args: unknown[]) => infer R
     : R
   : unknown;
 
+/** Detects if a type is `any`. */
+type IsAny<T> = 0 extends 1 & T ? true : false;
+
+/** Checks if a schema type should require a property. */
+type RequiresProperty<T> = IsAny<T> extends true ? false : keyof T extends never ? false : true;
+
 type BuildOptions<HasPathParams extends boolean, Q, B> = HasPathParams extends true
-  ? { path: Record<string, string> } & (keyof Q extends never ? {} : { query?: Q }) &
-      (keyof B extends never ? {} : { body: B }) &
+  ? { path: Record<string, string> } & (RequiresProperty<Q> extends true ? { query?: Q } : {}) &
+      (RequiresProperty<B> extends true ? { body: B } : {}) &
       LocalClientConfig
-  : (keyof Q extends never ? {} : { query?: Q }) &
-      (keyof B extends never ? {} : { body: B }) &
+  : (RequiresProperty<Q> extends true ? { query?: Q } : {}) &
+      (RequiresProperty<B> extends true ? { body: B } : {}) &
       LocalClientConfig;
 
+/** Safely infer schema, returning {} for any or non-schema types. */
+type SafeInferSchema<T> =
+  IsAny<T> extends true
+    ? {}
+    : T extends import('./schema.js').SchemaDefinition
+      ? InferSchema<T>
+      : {};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MethodClient<T, HasPathParams extends boolean = false> = T extends RouteDefinition<
   infer Q,
   infer B,
-  infer R
+  infer R,
+  any,
+  any
 >
-  ? (options?: BuildOptions<HasPathParams, InferSchema<Q>, InferSchema<B>>) => Promise<R>
+  ? (options?: BuildOptions<HasPathParams, SafeInferSchema<Q>, SafeInferSchema<B>>) => Promise<R>
   : T extends (...args: unknown[]) => unknown
     ? (options?: BuildOptions<HasPathParams, {}, {}>) => Promise<ExtractReturn<T>>
     : never;
@@ -86,21 +96,55 @@ type HasParams<Path extends string[]> = Path extends [infer Head, ...infer Rest 
     : HasParams<Rest>
   : false;
 
+/** Extract the MethodEntry part from a union type. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ExtractMethod<T> = Extract<
+  T,
+  RouteDefinition<any, any, any, any, any> | ((...args: unknown[]) => unknown)
+>;
+
+/** Helper to extract return type for implicit GET calls. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ImplicitGetCall<T extends RouterRoutes, Path extends string[] = []> = 'get' extends keyof T
+  ? ExtractMethod<T['get']> extends RouteDefinition<infer _Q, infer _B, infer R, any, any>
+    ? HasParams<Path> extends true
+      ? (
+          options: { path: Record<string, string> } & {
+            query?: Record<string, unknown>;
+          } & LocalClientConfig,
+        ) => Promise<R>
+      : (options?: LocalRequestOptions) => Promise<R>
+    : ExtractMethod<T['get']> extends (...args: unknown[]) => unknown
+      ? HasParams<Path> extends true
+        ? (
+            options: { path: Record<string, string> } & {
+              query?: Record<string, unknown>;
+            } & LocalClientConfig,
+          ) => Promise<ExtractReturn<ExtractMethod<T['get']>>>
+        : (options?: LocalRequestOptions) => Promise<ExtractReturn<ExtractMethod<T['get']>>>
+      : (options?: LocalRequestOptions) => Promise<unknown>
+  : (options?: LocalRequestOptions) => Promise<unknown>;
+
+/** Client type for a router. */
 type RouterClient<T extends RouterRoutes, Path extends string[] = []> = {
-  [K in keyof T as K extends HttpMethods ? K : never]: T[K] extends
-    | RouteDefinition
-    | ((...args: unknown[]) => unknown)
-    ? MethodClient<T[K], HasParams<Path>>
-    : never;
-} & {
-  // Uses RouterBrand check first to handle cross-module type inference.
-  [K in keyof T as K extends HttpMethods ? never : K]: T[K] extends RouterBrand
-    ? T[K] extends Router<infer Routes>
-      ? RouterClient<Routes, [...Path, K & string]> &
-          ((options?: LocalRequestOptions) => Promise<unknown>)
+  // Method handlers become callable methods (get, post, etc.).
+  [K in keyof T as K extends HttpMethods ? K : never]: ExtractMethod<T[K]> extends infer M
+    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      M extends RouteDefinition<any, any, any, any, any> | ((...args: unknown[]) => unknown)
+      ? MethodClient<M, HasParams<Path>>
       : never
     : never;
-} & ((options?: LocalRequestOptions) => Promise<unknown>);
+} & {
+  // ALL keys (including lowercase method names) become navigation paths.
+  [K in keyof T as K extends HttpMethods ? never : K]: Extract<
+    T[K],
+    { routes: RouterRoutes }
+  > extends {
+    routes: infer Routes extends RouterRoutes;
+  }
+    ? RouterClient<Routes, [...Path, K & string]> & ImplicitGetCall<Routes, [...Path, K & string]>
+    : never;
+} & ImplicitGetCall<T, Path>;
 
 export type LocalClient<T extends Router<RouterRoutes>> = {
   configure(config: LocalClientConfig): void;
@@ -193,7 +237,7 @@ function collectPathParams(
  *
  * @example
  * ```typescript
- * import { createLocalClient } from 'typed-routes';
+ * import { createLocalClient } from '@fresho/router';
  * import { api } from './api.js';
  *
  * const client = createLocalClient(api);

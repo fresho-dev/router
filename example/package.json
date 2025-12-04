@@ -1,5 +1,5 @@
 {
-  "name": "typed-routes-example",
+  "name": "router-example",
   "version": "1.0.0",
   "type": "module",
   "private": true,
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "typed-routes": "file:.."
+    "@fresho/router": "file:.."
   },
   "devDependencies": {
     "@types/deno": "^2.5.0",

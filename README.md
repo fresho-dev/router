@@ -1,11 +1,11 @@
-# typed-routes
+# @fresho/router
 
 Type-safe routing for Cloudflare Workers, Deno, Bun, and Node.js. Define routes once, get validated handlers, typed clients, and OpenAPI docs.
 
 **~2KB gzipped. Zero dependencies.**
 
 ```typescript
-import { route, router } from "typed-routes";
+import { route, router } from "@fresho/router";
 
 const api = router({
 	health: router({
@@ -53,7 +53,7 @@ export default { fetch: api.handler() };
 ## Installation
 
 ```bash
-npm install typed-routes
+npm install @fresho/router
 ```
 
 ## Path Convention
@@ -195,8 +195,8 @@ const api = router({
 Add middleware to routers:
 
 ```typescript
-import { router, route } from "typed-routes";
-import { cors, errorHandler, jwtAuth } from "typed-routes/middleware";
+import { router, route } from "@fresho/router";
+import { cors, errorHandler, jwtAuth } from "@fresho/router/middleware";
 
 const api = router(
 	{
@@ -220,7 +220,7 @@ Generate a typed client for your API:
 
 ```typescript
 // === Server (api.ts) ===
-import { route, router } from "typed-routes";
+import { route, router } from "@fresho/router";
 
 export const api = router({
 	users: router({
@@ -235,7 +235,7 @@ export const api = router({
 });
 
 // === Client ===
-import { createHttpClient } from "typed-routes";
+import { createHttpClient } from "@fresho/router";
 import type { api } from "./api"; // Type-only import!
 
 const client = createHttpClient<typeof api>({
@@ -276,7 +276,7 @@ This allows routes with path segments named after HTTP methods (e.g., `/api/get`
 Test handlers directly without HTTP overhead:
 
 ```typescript
-import { createLocalClient } from "typed-routes";
+import { createLocalClient } from "@fresho/router";
 
 const client = createLocalClient(api);
 client.configure({ env: { DB: mockDb } });
@@ -290,7 +290,7 @@ assert.equal(user.name, "Alice");
 Generate OpenAPI 3.0 documentation:
 
 ```typescript
-import { generateDocs } from "typed-routes";
+import { generateDocs } from "@fresho/router";
 
 const spec = generateDocs(api, {
 	title: "My API",
@@ -310,7 +310,7 @@ const docs = router({
 ### Server-Sent Events
 
 ```typescript
-import { sseResponse } from "typed-routes";
+import { sseResponse } from "@fresho/router";
 
 events: router({
 	get: async () =>
@@ -325,7 +325,7 @@ events: router({
 ### JSON Lines
 
 ```typescript
-import { streamJsonLines } from "typed-routes";
+import { streamJsonLines } from "@fresho/router";
 
 logs: router({
 	get: async () =>
@@ -340,7 +340,7 @@ logs: router({
 ## Cloudflare Workers
 
 ```typescript
-import { route, router } from 'typed-routes';
+import { route, router } from '@fresho/router';
 
 const api = router({ ... });
 

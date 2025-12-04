@@ -1,7 +1,7 @@
 /**
  * @fileoverview Core middleware types and utilities.
  *
- * Provides middleware support for typed-routes with a simple, composable API.
+ * Provides middleware support for @fresho/router with a simple, composable API.
  *
  * @example Type-hinting context properties
  * ```typescript

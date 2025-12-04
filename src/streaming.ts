@@ -1,5 +1,5 @@
 /**
- * @fileoverview Streaming response utilities for typed-routes.
+ * @fileoverview Streaming response utilities for @fresho/router.
  *
  * Provides helpers for Server-Sent Events (SSE) and newline-delimited JSON (NDJSON)
  * streaming responses. These are useful for real-time updates, progress indicators,
@@ -11,7 +11,7 @@
  *
  * @example
  * ```typescript
- * import { router, sseResponse, streamJsonLines } from 'typed-routes';
+ * import { router, sseResponse, streamJsonLines } from '@fresho/router';
  *
  * const api = router({
  *   // SSE for real-time updates

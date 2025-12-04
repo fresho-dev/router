@@ -13,7 +13,7 @@ client.configure({ baseUrl: 'http://localhost:3000' });
 async function list(filter?: 'done' | 'pending') {
   const query =
     filter === 'done' ? { completed: true } : filter === 'pending' ? { completed: false } : undefined;
-  const result = await client.todos.list(query ? { query } : undefined);
+  const result = await client.api.todos(query ? { query } : undefined);
   console.log(`\n${result.count} todo(s):`);
   if (result.todos.length === 0) {
     console.log('  (no todos)\n');
@@ -27,13 +27,13 @@ async function list(filter?: 'done' | 'pending') {
 }
 
 async function add(title: string) {
-  const todo = await client.todos.create({ body: { title } });
+  const todo = await client.api.todos.$post({ body: { title } });
   console.log(`\nCreated: [${todo.id}] ${todo.title}\n`);
 }
 
 async function done(id: string) {
   try {
-    const todo = await client.todos.update({ path: { id }, body: { completed: true } });
+    const todo = await client.api.todos.$id.$patch({ path: { id }, body: { completed: true } });
     console.log(`\nMarked done: ${todo.title}\n`);
   } catch {
     console.log(`\nTodo ${id} not found.\n`);
@@ -42,7 +42,7 @@ async function done(id: string) {
 
 async function undo(id: string) {
   try {
-    const todo = await client.todos.update({ path: { id }, body: { completed: false } });
+    const todo = await client.api.todos.$id.$patch({ path: { id }, body: { completed: false } });
     console.log(`\nMarked pending: ${todo.title}\n`);
   } catch {
     console.log(`\nTodo ${id} not found.\n`);
@@ -51,7 +51,7 @@ async function undo(id: string) {
 
 async function rename(id: string, title: string) {
   try {
-    const todo = await client.todos.update({ path: { id }, body: { title } });
+    const todo = await client.api.todos.$id.$patch({ path: { id }, body: { title } });
     console.log(`\nRenamed to: ${todo.title}\n`);
   } catch {
     console.log(`\nTodo ${id} not found.\n`);
@@ -60,7 +60,7 @@ async function rename(id: string, title: string) {
 
 async function remove(id: string) {
   try {
-    await client.todos.delete({ path: { id } });
+    await client.api.todos.$id.$delete({ path: { id } });
     console.log(`\nDeleted todo ${id}.\n`);
   } catch {
     console.log(`\nTodo ${id} not found.\n`);

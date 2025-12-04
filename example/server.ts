@@ -1,9 +1,17 @@
 /**
  * Server implementation - defines the API with handlers.
+ *
+ * Uses property-based routing where:
+ * - Property names become URL path segments
+ * - `$param` prefix creates dynamic segments (`:param`)
+ * - HTTP methods (get, post, etc.) are route handlers
+ *
+ * To add a path prefix like `/api`, wrap routes in a sub-router:
+ *   router({ api: router({ ... }) })
  */
 
-import { route, router, createHttpClient } from 'typed-routes';
-import { cors, errorHandler, HttpError } from 'typed-routes/middleware';
+import { route, router, createHttpClient } from '@fresho/router';
+import { cors, errorHandler, HttpError } from '@fresho/router/middleware';
 
 // Shared types.
 export interface Todo {
@@ -25,81 +33,84 @@ export function resetStore() {
 
 /** The API router with handlers. */
 export const api = router(
-  '/api',
   {
-    health: route({
-      method: 'get',
-      path: '/health',
-      handler: async () => ({ status: 'ok', timestamp: new Date().toISOString() }),
-    }),
-
-    todos: router('/todos', {
-      list: route({
-        method: 'get',
-        path: '',
-        query: { completed: 'boolean?' },
-        handler: async (c) => {
-          let items = Array.from(todos.values());
-          if (c.query.completed !== undefined) {
-            items = items.filter((t) => t.completed === c.query.completed);
-          }
-          return { todos: items, count: items.length };
-        },
+    // Wrap in `api` sub-router to get /api/* paths
+    api: router({
+      // GET /api/health
+      health: router({
+        get: route({
+          handler: async () => ({ status: 'ok', timestamp: new Date().toISOString() }),
+        }),
       }),
 
-      get: route({
-        method: 'get',
-        path: '/:id',
-        handler: async (c) => {
-          const todo = todos.get(c.path.id);
-          if (!todo) throw new HttpError('Todo not found', 404);
-          return todo;
-        },
-      }),
+      // /api/todos routes
+      todos: router({
+        // GET /api/todos - list all todos
+        get: route({
+          query: { completed: 'boolean?' },
+          handler: async (c) => {
+            let items = Array.from(todos.values());
+            if (c.query.completed !== undefined) {
+              items = items.filter((t) => t.completed === c.query.completed);
+            }
+            return { todos: items, count: items.length };
+          },
+        }),
 
-      create: route({
-        method: 'post',
-        path: '',
-        body: { title: 'string' },
-        handler: async (c) => {
-          const id = String(nextId++);
-          const todo: Todo = {
-            id,
-            title: c.body.title,
-            completed: false,
-            createdAt: new Date().toISOString(),
-          };
-          todos.set(id, todo);
-          return todo;
-        },
-      }),
+        // POST /api/todos - create a todo
+        post: route({
+          body: { title: 'string' },
+          handler: async (c) => {
+            const id = String(nextId++);
+            const todo: Todo = {
+              id,
+              title: c.body.title,
+              completed: false,
+              createdAt: new Date().toISOString(),
+            };
+            todos.set(id, todo);
+            return todo;
+          },
+        }),
 
-      update: route({
-        method: 'patch',
-        path: '/:id',
-        body: { title: 'string?', completed: 'boolean?' },
-        handler: async (c) => {
-          const todo = todos.get(c.path.id);
-          if (!todo) throw new HttpError('Todo not found', 404);
-          if (c.body.title !== undefined) todo.title = c.body.title;
-          if (c.body.completed !== undefined) todo.completed = c.body.completed;
-          return todo;
-        },
-      }),
+        // /api/todos/:id routes
+        $id: router({
+          // GET /api/todos/:id
+          get: route.ctx<{ path: { id: string } }>()({
+            handler: async (c) => {
+              const todo = todos.get(c.path.id);
+              if (!todo) throw new HttpError('Todo not found', 404);
+              return todo;
+            },
+          }),
 
-      delete: route({
-        method: 'delete',
-        path: '/:id',
-        handler: async (c) => {
-          const existed = todos.delete(c.path.id);
-          if (!existed) throw new HttpError('Todo not found', 404);
-          return { deleted: true };
-        },
+          // PATCH /api/todos/:id
+          patch: route.ctx<{ path: { id: string } }>()({
+            body: { title: 'string?', completed: 'boolean?' },
+            handler: async (c) => {
+              const todo = todos.get(c.path.id);
+              if (!todo) throw new HttpError('Todo not found', 404);
+              if (c.body.title !== undefined) todo.title = c.body.title;
+              if (c.body.completed !== undefined) todo.completed = c.body.completed;
+              return todo;
+            },
+          }),
+
+          // DELETE /api/todos/:id
+          delete: route.ctx<{ path: { id: string } }>()({
+            handler: async (c) => {
+              const existed = todos.delete(c.path.id);
+              if (!existed) throw new HttpError('Todo not found', 404);
+              return { deleted: true };
+            },
+          }),
+        }),
       }),
     }),
   },
-  [cors(), errorHandler()]
+  cors(),
+  errorHandler()
 );
 
 /** Typed HTTP client - import this on the client side. */
-export const client = createHttpClient(api);
+export const client = createHttpClient<typeof api>();

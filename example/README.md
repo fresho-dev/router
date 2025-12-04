@@ -1,6 +1,6 @@
-# typed-routes example
+# @fresho/router example
 
-A todo API demonstrating typed-routes across different platforms.
+A todo API demonstrating @fresho/router across different platforms.
 
 ## Setup
 

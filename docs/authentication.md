@@ -1,6 +1,6 @@
 # Authentication
 
-typed-routes provides flexible authentication support for both token-based and cookie-based auth flows.
+@fresho/router provides flexible authentication support for both token-based and cookie-based auth flows.
 
 ## Table of Contents
 
@@ -34,8 +34,8 @@ The simplest approach for web applications. The server sets an httpOnly cookie, 
 ### Server
 
 ```typescript
-import { route, router } from 'typed-routes';
-import { jwtAuth, jwtSign } from 'typed-routes/middleware';
+import { route, router } from '@fresho/router';
+import { jwtAuth, jwtSign } from '@fresho/router/middleware';
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 
@@ -109,7 +109,7 @@ export default { fetch: api.handler() };
 ### Client
 
 ```typescript
-import { createHttpClient } from 'typed-routes';
+import { createHttpClient } from '@fresho/router';
 import type { api } from './server.js';
 
 const client = createHttpClient<typeof api>({
@@ -177,7 +177,7 @@ login: router({
 Use dynamic headers to include the token:
 
 ```typescript
-import { createHttpClient } from 'typed-routes';
+import { createHttpClient } from '@fresho/router';
 import type { api } from './server.js';
 
 // Token storage (use your state management in practice)
@@ -212,7 +212,7 @@ To avoid forcing users to re-login when tokens expire, implement a refresh flow.
 Refresh the token before it expires using an async header function:
 
 ```typescript
-import { jwtSign } from 'typed-routes/middleware';
+import { jwtSign } from '@fresho/router/middleware';
 
 let token: string | null = null;
 let tokenExp: number = 0;
@@ -269,7 +269,7 @@ refresh: router({
 Signs a JWT token using Web Crypto API. Compatible with Cloudflare Workers, Deno, and browsers.
 
 ```typescript
-import { jwtSign } from 'typed-routes/middleware';
+import { jwtSign } from '@fresho/router/middleware';
 
 const token = await jwtSign(
   { email: 'user@example.com', role: 'admin' },  // Custom claims
@@ -303,7 +303,7 @@ const token = await jwtSign(
 Verifies a JWT token and returns the payload. Use this when you need to verify tokens outside of the middleware context.
 
 ```typescript
-import { jwtVerify } from 'typed-routes/middleware';
+import { jwtVerify } from '@fresho/router/middleware';
 
 try {
   const payload = await jwtVerify(token, 'your-secret-key');
@@ -335,7 +335,7 @@ const payload = await jwtVerify(token, secret, { algorithms: ['HS512'] });
 Middleware that verifies JWT tokens from the Authorization header or cookies.
 
 ```typescript
-import { jwtAuth } from 'typed-routes/middleware';
+import { jwtAuth } from '@fresho/router/middleware';
 
 jwtAuth({
   // Required: secret key

@@ -30,10 +30,10 @@ export const HTTP_METHODS = new Set<string>([
 ]);
 
 /** Symbol to mark an object as a route definition. */
-export const ROUTE_MARKER = Symbol.for('typed-routes:route');
+export const ROUTE_MARKER = Symbol.for('@fresho/router:route');
 
 /** Symbol to mark an object as a router. */
-export const ROUTER_MARKER = Symbol.for('typed-routes:router');
+export const ROUTER_MARKER = Symbol.for('@fresho/router:router');
 
 /**
  * Brand symbol for Router type identification across module boundaries.

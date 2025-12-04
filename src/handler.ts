@@ -1,5 +1,5 @@
 /**
- * @fileoverview HTTP request handler for typed-routes.
+ * @fileoverview HTTP request handler for @fresho/router.
  *
  * Builds paths from property names:
  * - Regular properties = path segments

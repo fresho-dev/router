@@ -1,5 +1,5 @@
 /**
- * @fileoverview typed-routes - Framework-agnostic type-safe routing library.
+ * @fileoverview @fresho/router - Framework-agnostic type-safe routing library.
  *
  * A zero-dependency routing library that provides end-to-end type safety from
  * route definition to client consumption. Works with Cloudflare Workers, Deno,
@@ -15,7 +15,7 @@
  *
  * ```typescript
  * // === Server (server/api.ts) ===
- * import { route, router } from 'typed-routes';
+ * import { route, router } from '@fresho/router';
  *
  * export const api = router({
  *   health: router({
@@ -40,7 +40,7 @@
  * export default { fetch: api.handler() };
  *
  * // === Client ===
- * import { createHttpClient } from 'typed-routes';
+ * import { createHttpClient } from '@fresho/router';
  * import type { api } from './api';  // Type-only import!
  *
  * const client = createHttpClient<typeof api>({ baseUrl: 'https://api.example.com' });
@@ -63,7 +63,7 @@
  * - {@link sseResponse} - Server-Sent Events streaming
  * - {@link streamJsonLines} - NDJSON streaming
  *
- * For authentication middleware, import from `typed-routes/middleware`:
+ * For authentication middleware, import from `@fresho/router/middleware`:
  * - `jwtAuth` - JWT authentication middleware
  * - `jwtSign` - Sign JWT tokens
  * - `jwtVerify` - Verify JWT tokens
@@ -87,7 +87,7 @@ export {
   type LocalClientConfig,
   type LocalRequestOptions,
 } from './local-client.js';
-// Middleware types and utilities (implementations available via 'typed-routes/middleware').
+// Middleware types and utilities (implementations available via '@fresho/router/middleware').
 export type { Middleware, MiddlewareContext, MiddlewareNext } from './middleware.js';
 export { runMiddleware } from './middleware.js';
 // Schema types and compilation.

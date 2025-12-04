@@ -1,5 +1,5 @@
 /**
- * @fileoverview Middleware implementations for typed-routes.
+ * @fileoverview Middleware implementations for @fresho/router.
  *
  * Provides ready-to-use middleware for common web application needs:
  * - **CORS** - Cross-Origin Resource Sharing with flexible origin matching
@@ -11,12 +11,12 @@
  * - **Timeout** - Abort requests that take too long
  * - **Content Type** - Validate request content types
  *
- * Import via: `import { cors, jwtAuth, ... } from 'typed-routes/middleware';`
+ * Import via: `import { cors, jwtAuth, ... } from '@fresho/router/middleware';`
  *
  * @example
  * ```typescript
- * import { router } from 'typed-routes';
- * import { cors, jwtAuth, errorHandler, rateLimit } from 'typed-routes/middleware';
+ * import { router } from '@fresho/router';
+ * import { cors, jwtAuth, errorHandler, rateLimit } from '@fresho/router/middleware';
  *
  * const api = router('/api', routes,
  *   cors({ origin: 'https://example.com' }),

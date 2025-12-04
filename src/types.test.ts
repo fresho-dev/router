@@ -150,6 +150,171 @@ describe('types', () => {
     });
   });
 
+  describe('Deeply nested routes with api prefix pattern', () => {
+    // This test suite specifically covers the issue where deeply nested routers
+    // (3+ levels like api -> todos -> $id -> get) caused type inference to fail,
+    // resulting in `never` types or `unknown` return types.
+
+    it('infers correct return type for nested GET routes', () => {
+      const api = router({
+        api: router({
+          health: router({
+            get: route({
+              handler: async () => ({ status: 'ok' as const, timestamp: new Date().toISOString() }),
+            }),
+          }),
+        }),
+      });
+
+      const client = createLocalClient(api);
+
+      // The return type should be inferred correctly, not 'unknown'.
+      type HealthResult = Awaited<ReturnType<typeof client.api.health>>;
+      type HasStatus = HealthResult extends { status: 'ok' } ? true : false;
+      const _hasStatus: HasStatus = true;
+
+      assert.ok(true);
+    });
+
+    it('infers correct return type for nested POST routes', () => {
+      interface Todo {
+        id: string;
+        title: string;
+      }
+
+      const api = router({
+        api: router({
+          todos: router({
+            post: route({
+              body: { title: 'string' },
+              handler: async (c): Promise<Todo> => ({
+                id: '1',
+                title: c.body.title,
+              }),
+            }),
+          }),
+        }),
+      });
+
+      const client = createLocalClient(api);
+
+      // The POST method should be callable and return the correct type.
+      type PostResult = Awaited<ReturnType<typeof client.api.todos.post>>;
+      type HasId = PostResult extends { id: string } ? true : false;
+      const _hasId: HasId = true;
+
+      assert.ok(true);
+    });
+
+    it('handles routes with path parameters at 4+ levels deep', () => {
+      const api = router({
+        api: router({
+          todos: router({
+            $id: router({
+              get: route.ctx<{ path: { id: string } }>()({
+                handler: async (c) => ({ id: c.path.id, title: 'Test' }),
+              }),
+              patch: route.ctx<{ path: { id: string } }>()({
+                body: { title: 'string?', completed: 'boolean?' },
+                handler: async (c) => ({
+                  id: c.path.id,
+                  title: c.body.title ?? 'Default',
+                  completed: c.body.completed ?? false,
+                }),
+              }),
+              delete: route.ctx<{ path: { id: string } }>()({
+                handler: async (c) => ({ deleted: true, id: c.path.id }),
+              }),
+            }),
+          }),
+        }),
+      });
+
+      const client = createLocalClient(api);
+
+      // All methods should be callable, not 'never'.
+      type GetMethod = typeof client.api.todos.$id;
+      type PatchMethod = typeof client.api.todos.$id.patch;
+      type DeleteMethod = typeof client.api.todos.$id.delete;
+
+      type IsGetNever = GetMethod extends never ? true : false;
+      type IsPatchNever = PatchMethod extends never ? true : false;
+      type IsDeleteNever = DeleteMethod extends never ? true : false;
+
+      const _getNotNever: IsGetNever = false;
+      const _patchNotNever: IsPatchNever = false;
+      const _deleteNotNever: IsDeleteNever = false;
+
+      assert.ok(true);
+    });
+
+    it('does not require body for routes without body schema', async () => {
+      const api = router({
+        api: router({
+          items: router({
+            $id: router({
+              // DELETE route with no body schema.
+              delete: route.ctx<{ path: { id: string } }>()({
+                handler: async (c) => ({ deleted: true, id: c.path.id }),
+              }),
+            }),
+          }),
+        }),
+      });
+
+      const client = createLocalClient(api);
+
+      // This should compile without requiring a body parameter.
+      // If body was incorrectly required, this would be a type error.
+      const result = await client.api.items.$id.delete({ path: { id: '123' } });
+      assert.strictEqual(result.deleted, true);
+      assert.strictEqual(result.id, '123');
+    });
+
+    it('HttpClient resolves deeply nested routes with api prefix', () => {
+      const api = router({
+        api: router({
+          users: router({
+            get: route({
+              query: { limit: 'number?' },
+              handler: async () => ({ users: [], count: 0 }),
+            }),
+            $id: router({
+              get: route.ctx<{ path: { id: string } }>()({
+                handler: async (c) => ({ id: c.path.id, name: 'Test' }),
+              }),
+            }),
+          }),
+        }),
+      });
+
+      const client = createHttpClient<typeof api>({});
+
+      // All nested paths should resolve correctly.
+      type UsersClient = typeof client.api.users;
+      type UserByIdClient = typeof client.api.users.$id;
+
+      type IsUsersNever = UsersClient extends never ? true : false;
+      type IsUserByIdNever = UserByIdClient extends never ? true : false;
+
+      const _usersNotNever: IsUsersNever = false;
+      const _userByIdNotNever: IsUserByIdNever = false;
+
+      // $get should work for explicit GET calls.
+      type GetMethod = typeof client.api.users.$get;
+      type IsGetMethodNever = GetMethod extends never ? true : false;
+      const _getMethodNotNever: IsGetMethodNever = false;
+
+      // Implicit GET (calling client.api.users() directly) should also work.
+      // The client.api.users is an intersection type that includes a callable.
+      type UsersCallable = typeof client.api.users;
+      type IsUsersCallable = UsersCallable extends () => unknown ? true : false;
+      const _usersCallable: IsUsersCallable = true;
+
+      assert.ok(true);
+    });
+  });
+
   describe('RouterBrand', () => {
     it('Router extends RouterBrand for cross-module type inference', () => {
       // Create a sub-router (simulates import from another module).
