@@ -1,9 +1,0 @@
-{
-  "name": "@fresho/router",
-  "version": "0.1.0",
-  "license": "MIT",
-  "exports": {
-    ".": "./src/index.ts",
-    "./middleware": "./src/middleware/index.ts"
-  }
-}
