@@ -1,17 +1,17 @@
 {
-  "name": "typed-routes",
+  "name": "@fresho/router",
   "version": "0.1.0",
   "description": "Type-safe route definitions with auto-generated clients and OpenAPI docs",
   "license": "MIT",
   "author": "fresho.dev",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/fresho-dev/typed-routes.git"
+    "url": "git+https://github.com/fresho-dev/router.git"
   },
   "bugs": {
-    "url": "https://github.com/fresho-dev/typed-routes/issues"
+    "url": "https://github.com/fresho-dev/router/issues"
   },
-  "homepage": "https://github.com/fresho-dev/typed-routes#readme",
+  "homepage": "https://github.com/fresho-dev/router#README.md",
   "keywords": [
     "router",
     "routing",
