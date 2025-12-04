@@ -15,7 +15,7 @@
   "scripts": {
     "lint": "biome check . && tsc --noEmit",
     "lint:fix": "biome check --write .",
-    "test": "node --import tsx --test $(find src -name '*.test.ts')",
+    "test": "npm run lint && node --import tsx --test 'src/**/*.test.ts'",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
