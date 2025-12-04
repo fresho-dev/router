@@ -29,9 +29,6 @@
     "schema"
   ],
   "type": "module",
-  "engines": {
-    "node": ">=20"
-  },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
