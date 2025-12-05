@@ -154,7 +154,16 @@ import {
 - **`basicAuth`** - HTTP Basic authentication
 - **`bearerAuth`** - Simple bearer token authentication
 - **`jwtAuth`** - JWT authentication with signature verification
-- **`jwtSign`** - JWT token signing utility
+
+The middleware module also re-exports `jwtSign` and `jwtVerify` for convenience. For standalone auth utilities (without middleware), import from `@fresho/router/auth`:
+
+```typescript
+// Standalone utilities
+import { jwtSign, jwtVerify, parseBasicAuth } from '@fresho/router/auth';
+
+// Middleware (also re-exports jwtSign/jwtVerify)
+import { jwtAuth, basicAuth, jwtSign } from '@fresho/router/middleware';
+```
 
 For complete documentation, examples, and patterns (cookie-based auth, token refresh, etc.), see the **[Authentication Guide](authentication.md)**.
 

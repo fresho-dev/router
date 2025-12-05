@@ -214,6 +214,30 @@ Built-in middleware: `cors`, `errorHandler`, `logger`, `rateLimit`, `requestId`,
 
 See **[Middleware Documentation](docs/middleware.md)** for detailed usage.
 
+## Authentication Utilities
+
+For standalone auth utilities (JWT signing/verification, Basic auth, OAuth), import from `@fresho/router/auth`:
+
+```typescript
+import { jwtSign, jwtVerify, parseBasicAuth } from "@fresho/router/auth";
+
+// Sign a JWT
+const token = await jwtSign({ uid: "user-123" }, secret, { expiresIn: "1h" });
+
+// Verify a JWT
+const payload = await jwtVerify(token, secret);
+
+// Parse Basic auth header
+const creds = parseBasicAuth(request.headers.get("Authorization"));
+```
+
+Available utilities:
+- **JWT**: `jwtSign`, `jwtVerify`
+- **Basic Auth**: `parseBasicAuth`, `encodeBasicAuth`, `extractBasicAuthToken`
+- **OAuth**: `encodeOAuthState`, `decodeOAuthState`, `exchangeCode`, `refreshAccessToken`, `revokeToken`, `buildAuthorizationUrl`, `OAUTH_PROVIDERS`
+
+See **[Authentication Documentation](docs/authentication.md)** for detailed usage.
+
 ## HTTP Client
 
 Generate a typed client for your API:

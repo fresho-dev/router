@@ -5,11 +5,13 @@
 ## Table of Contents
 
 - [Overview](#overview)
+- [Import Paths](#import-paths)
 - [Cookie-Based Auth](#cookie-based-auth)
 - [Token-Based Auth](#token-based-auth)
 - [Token Refresh](#token-refresh)
 - [API Reference](#api-reference)
   - [jwtSign](#jwtsign)
+  - [jwtVerify](#jwtverify)
   - [jwtAuth](#jwtauth)
 
 ---
@@ -24,6 +26,29 @@ There are two main approaches to authentication:
 | **Bearer tokens** | SPAs, mobile apps, cross-origin | Memory or secure storage | Moderate |
 
 Both approaches use the same server-side middleware (`jwtAuth`) - the difference is where the token is stored and how it's sent.
+
+---
+
+## Import Paths
+
+Authentication utilities are available from two paths:
+
+```typescript
+// Standalone utilities (JWT, Basic Auth, OAuth)
+import { jwtSign, jwtVerify, parseBasicAuth } from '@fresho/router/auth';
+
+// Middleware wrappers (also re-exports jwtSign/jwtVerify for convenience)
+import { jwtAuth, basicAuth, bearerAuth, jwtSign, jwtVerify } from '@fresho/router/middleware';
+```
+
+Use `@fresho/router/auth` when you need:
+- JWT signing/verification without middleware
+- Basic auth parsing utilities
+- OAuth state encoding, token exchange, etc.
+
+Use `@fresho/router/middleware` when you need:
+- Authentication middleware (`jwtAuth`, `basicAuth`, `bearerAuth`)
+- Convenience access to `jwtSign`/`jwtVerify` alongside middleware
 
 ---
 
@@ -269,7 +294,8 @@ refresh: router({
 Signs a JWT token using Web Crypto API. Compatible with Cloudflare Workers, Deno, and browsers.
 
 ```typescript
-import { jwtSign } from '@fresho/router/middleware';
+import { jwtSign } from '@fresho/router/auth';
+// Or: import { jwtSign } from '@fresho/router/middleware';
 
 const token = await jwtSign(
   { email: 'user@example.com', role: 'admin' },  // Custom claims
@@ -303,7 +329,8 @@ const token = await jwtSign(
 Verifies a JWT token and returns the payload. Use this when you need to verify tokens outside of the middleware context.
 
 ```typescript
-import { jwtVerify } from '@fresho/router/middleware';
+import { jwtVerify } from '@fresho/router/auth';
+// Or: import { jwtVerify } from '@fresho/router/middleware';
 
 try {
   const payload = await jwtVerify(token, 'your-secret-key');

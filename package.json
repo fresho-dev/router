@@ -3,7 +3,7 @@
   "engines": {
     "node": ">=22"
   },
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Type-safe route definitions with auto-generated clients and OpenAPI docs",
   "license": "MIT",
   "author": "fresho.dev",
@@ -40,13 +40,17 @@
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs"
     },
+    "./auth": {
+      "types": "./dist/auth/index.d.mts",
+      "import": "./dist/auth/index.mjs"
+    },
     "./middleware": {
       "types": "./dist/middleware/index.d.mts",
       "import": "./dist/middleware/index.mjs"
     }
   },
   "scripts": {
-    "build": "tsdown src/index.ts src/middleware/index.ts",
+    "build": "tsdown src/index.ts src/auth/index.ts src/middleware/index.ts",
     "clean": "rm -rf ./dist",
     "typecheck": "tsc --noEmit",
     "lint": "biome check . && npm run typecheck",
