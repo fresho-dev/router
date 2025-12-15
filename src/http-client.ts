@@ -33,17 +33,13 @@
  * ```
  */
 
-import type { InferSchema } from './schema.js';
-import type { Method, RouteDefinition, Router, RouterRoutes } from './types.js';
+import { createRecursiveProxy } from './client-proxy.js';
+import type { ExtractMethod, HeaderValue, RequestOptions, RouterClient } from './client-types.js';
+import type { Method, Router, RouterRoutes } from './types.js';
 
 // =============================================================================
 // Configuration Types
 // =============================================================================
-
-/** Header value that can be static or dynamic. */
-export type HeaderValue =
-  | string
-  | (() => string | null | undefined | Promise<string | null | undefined>);
 
 /** HTTP client configuration. */
 export interface HttpClientConfig {
@@ -52,136 +48,22 @@ export interface HttpClientConfig {
   credentials?: RequestCredentials;
 }
 
-/** Options for an HTTP request. */
-export interface HttpRequestOptions {
-  path?: Record<string, string>;
-  query?: Record<string, unknown>;
-  body?: unknown;
+/** Extra options for HTTP requests (headers). */
+export interface HttpExtraOptions {
   headers?: HeadersInit;
 }
+
+/** Options for an HTTP request. */
+export type HttpRequestOptions = RequestOptions<HttpExtraOptions>;
 
 // =============================================================================
 // Client Type Construction
 // =============================================================================
 
-/** HTTP method names as defined in routes (lowercase). */
-type LowercaseMethods = 'get' | 'post' | 'put' | 'patch' | 'delete';
-
-/** Map lowercase method to $-prefixed version. */
-type PrefixedMethod<T extends LowercaseMethods> = T extends 'get'
-  ? '$get'
-  : T extends 'post'
-    ? '$post'
-    : T extends 'put'
-      ? '$put'
-      : T extends 'patch'
-        ? '$patch'
-        : T extends 'delete'
-          ? '$delete'
-          : never;
-
-/** Extract return type from a handler. */
-type ExtractReturn<T> = T extends (...args: unknown[]) => infer R
-  ? R extends Promise<infer U>
-    ? U
-    : R
-  : unknown;
-
-/** Detects if a type is `any`. */
-type IsAny<T> = 0 extends 1 & T ? true : false;
-
-/** Checks if a schema type should require a property. */
-type RequiresProperty<T> = IsAny<T> extends true ? false : keyof T extends never ? false : true;
-
-/** Build options type based on whether path params are needed. */
-type BuildOptions<HasPathParams extends boolean, Q, B> = HasPathParams extends true
-  ? { path: Record<string, string> } & (RequiresProperty<Q> extends true ? { query?: Q } : {}) &
-      (RequiresProperty<B> extends true ? { body: B } : {}) & { headers?: HeadersInit }
-  : (RequiresProperty<Q> extends true ? { query?: Q } : {}) &
-      (RequiresProperty<B> extends true ? { body: B } : {}) & { headers?: HeadersInit };
-
-/** Safely infer schema, returning {} for any or non-schema types. */
-type SafeInferSchema<T> =
-  IsAny<T> extends true
-    ? {}
-    : T extends import('./schema.js').SchemaDefinition
-      ? InferSchema<T>
-      : {};
-
-/** Client type for a method entry (route or bare function). */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type MethodClient<T, HasPathParams extends boolean = false> = T extends RouteDefinition<
-  infer Q,
-  infer B,
-  infer R,
-  any,
-  any
->
-  ? (options?: BuildOptions<HasPathParams, SafeInferSchema<Q>, SafeInferSchema<B>>) => Promise<R>
-  : T extends (...args: unknown[]) => unknown
-    ? (options?: BuildOptions<HasPathParams, {}, {}>) => Promise<ExtractReturn<T>>
-    : never;
-
-/** Check if router tree contains any $param properties. */
-type HasParams<Path extends string[]> = Path extends [infer Head, ...infer Rest extends string[]]
-  ? Head extends `$${string}`
-    ? true
-    : HasParams<Rest>
-  : false;
-
-/** Extract the MethodEntry part from a union type. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ExtractMethod<T> = Extract<
-  T,
-  RouteDefinition<any, any, any, any, any> | ((...args: unknown[]) => unknown)
->;
-
-/** Client type for a router. */
-type RouterClient<T extends RouterRoutes, Path extends string[] = []> = {
-  // Method handlers become $-prefixed callable methods ($get, $post, etc.).
-  [K in keyof T as K extends LowercaseMethods ? PrefixedMethod<K> : never]: ExtractMethod<
-    T[K]
-  > extends infer M
-    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      M extends RouteDefinition<any, any, any, any, any> | ((...args: unknown[]) => unknown)
-      ? MethodClient<M, HasParams<Path>>
-      : never
-    : never;
-} & {
-  // ALL keys (including lowercase method names) become navigation paths.
-  [K in keyof T]: Extract<T[K], { routes: RouterRoutes }> extends {
-    routes: infer Routes extends RouterRoutes;
-  }
-    ? RouterClient<Routes, [...Path, K & string]> & ImplicitGetCall<Routes, [...Path, K & string]>
-    : never;
-} & ImplicitGetCall<T, Path>;
-
-/** Helper to extract return type for implicit GET calls. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ImplicitGetCall<T extends RouterRoutes, Path extends string[] = []> = 'get' extends keyof T
-  ? ExtractMethod<T['get']> extends RouteDefinition<infer _Q, infer _B, infer R, any, any>
-    ? HasParams<Path> extends true
-      ? (
-          options: { path: Record<string, string> } & { query?: Record<string, unknown> } & {
-            headers?: HeadersInit;
-          },
-        ) => Promise<R>
-      : (options?: HttpRequestOptions) => Promise<R>
-    : ExtractMethod<T['get']> extends (...args: unknown[]) => unknown
-      ? HasParams<Path> extends true
-        ? (
-            options: { path: Record<string, string> } & { query?: Record<string, unknown> } & {
-              headers?: HeadersInit;
-            },
-          ) => Promise<ExtractReturn<ExtractMethod<T['get']>>>
-        : (options?: HttpRequestOptions) => Promise<ExtractReturn<ExtractMethod<T['get']>>>
-      : (options?: HttpRequestOptions) => Promise<unknown>
-  : (options?: HttpRequestOptions) => Promise<unknown>;
-
 /** Top-level HTTP client type. */
 export type HttpClient<T extends Router<RouterRoutes>> = {
   configure(config: HttpClientConfig): void;
-} & RouterClient<T['routes']>;
+} & RouterClient<T['routes'], HttpExtraOptions>;
 
 // =============================================================================
 // Implementation
@@ -192,7 +74,6 @@ interface SharedConfig {
 }
 
 const BODY_METHODS = new Set(['post', 'put', 'patch']);
-const HTTP_METHODS = new Set(['$get', '$post', '$put', '$patch', '$delete', '$options', '$head']);
 
 /**
  * Creates a typed HTTP client.
@@ -240,46 +121,29 @@ export function createHttpClient<T extends Router<RouterRoutes>>(
     },
   } as HttpClient<T>;
 
+  const proxy = createRecursiveProxy({
+    onRequest: (segments, method, options) => {
+      return executeRequest(
+        sharedConfig,
+        segments,
+        method as Method,
+        options as HttpRequestOptions,
+      );
+    },
+  });
+
   return new Proxy(client, {
     get(target, prop) {
       if (prop === 'configure') return target.configure;
-      if (typeof prop === 'string') {
-        return createPathProxy(sharedConfig, [prop]);
-      }
-      return undefined;
+      // Delegate to recursive proxy for path building
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (proxy as any)[prop];
     },
     apply(_target, _thisArg, args) {
       // Direct call on root = GET /
       return executeRequest(sharedConfig, [], 'get', args[0] as HttpRequestOptions | undefined);
     },
   }) as HttpClient<T>;
-}
-
-/** Creates a proxy that tracks path segments. */
-function createPathProxy(sharedConfig: SharedConfig, segments: string[]): unknown {
-  const callable = (options?: HttpRequestOptions) => {
-    return executeRequest(sharedConfig, segments, 'get', options);
-  };
-
-  return new Proxy(callable, {
-    get(_target, prop) {
-      if (typeof prop !== 'string') return undefined;
-
-      // $-prefixed method = execute request (strip the $ prefix).
-      if (HTTP_METHODS.has(prop)) {
-        const method = prop.slice(1) as Method; // Remove $ prefix
-        return (options?: HttpRequestOptions) => {
-          return executeRequest(sharedConfig, segments, method, options);
-        };
-      }
-
-      // Otherwise = nested path segment.
-      return createPathProxy(sharedConfig, [...segments, prop]);
-    },
-    apply(_target, _thisArg, args) {
-      return callable(args[0] as HttpRequestOptions | undefined);
-    },
-  });
 }
 
 /** Builds a URL path from segments, substituting $param with values. */

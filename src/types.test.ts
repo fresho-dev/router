@@ -199,7 +199,7 @@ describe('types', () => {
       const client = createLocalClient(api);
 
       // The POST method should be callable and return the correct type.
-      type PostResult = Awaited<ReturnType<typeof client.api.todos.post>>;
+      type PostResult = Awaited<ReturnType<typeof client.api.todos.$post>>;
       type HasId = PostResult extends { id: string } ? true : false;
       const _hasId: HasId = true;
 
@@ -234,8 +234,8 @@ describe('types', () => {
 
       // All methods should be callable, not 'never'.
       type GetMethod = typeof client.api.todos.$id;
-      type PatchMethod = typeof client.api.todos.$id.patch;
-      type DeleteMethod = typeof client.api.todos.$id.delete;
+      type PatchMethod = typeof client.api.todos.$id.$patch;
+      type DeleteMethod = typeof client.api.todos.$id.$delete;
 
       type IsGetNever = GetMethod extends never ? true : false;
       type IsPatchNever = PatchMethod extends never ? true : false;
@@ -266,7 +266,7 @@ describe('types', () => {
 
       // This should compile without requiring a body parameter.
       // If body was incorrectly required, this would be a type error.
-      const result = await client.api.items.$id.delete({ path: { id: '123' } });
+      const result = await client.api.items.$id.$delete({ path: { id: '123' } });
       assert.strictEqual(result.deleted, true);
       assert.strictEqual(result.id, '123');
     });

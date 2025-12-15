@@ -19,10 +19,11 @@
  * ```
  */
 
-import type { InferSchema } from './schema.js';
+import { createRecursiveProxy } from './client-proxy.js';
+import type { RequestOptions, RouterClient } from './client-types.js';
 import { compileSchema } from './schema.js';
-import type { ExecutionContext, Method, RouteDefinition, Router, RouterRoutes } from './types.js';
-import { HTTP_METHODS, isFunction, isRoute, isRouter } from './types.js';
+import type { ExecutionContext, RouteDefinition, Router, RouterRoutes } from './types.js';
+import { isFunction, isRoute, isRouter } from './types.js';
 
 // =============================================================================
 // Configuration Types
@@ -35,120 +36,15 @@ export interface LocalClientConfig {
 }
 
 /** Options for a local client request. */
-export interface LocalRequestOptions {
-  path?: Record<string, string>;
-  query?: Record<string, unknown>;
-  body?: unknown;
-  env?: unknown;
-  ctx?: ExecutionContext;
-}
+export type LocalRequestOptions = RequestOptions<LocalClientConfig>;
 
 // =============================================================================
 // Client Type Construction (mirrors http-client types)
 // =============================================================================
 
-type HttpMethods = 'get' | 'post' | 'put' | 'patch' | 'delete';
-
-type ExtractReturn<T> = T extends (...args: unknown[]) => infer R
-  ? R extends Promise<infer U>
-    ? U
-    : R
-  : unknown;
-
-/** Detects if a type is `any`. */
-type IsAny<T> = 0 extends 1 & T ? true : false;
-
-/** Checks if a schema type should require a property. */
-type RequiresProperty<T> = IsAny<T> extends true ? false : keyof T extends never ? false : true;
-
-type BuildOptions<HasPathParams extends boolean, Q, B> = HasPathParams extends true
-  ? { path: Record<string, string> } & (RequiresProperty<Q> extends true ? { query?: Q } : {}) &
-      (RequiresProperty<B> extends true ? { body: B } : {}) &
-      LocalClientConfig
-  : (RequiresProperty<Q> extends true ? { query?: Q } : {}) &
-      (RequiresProperty<B> extends true ? { body: B } : {}) &
-      LocalClientConfig;
-
-/** Safely infer schema, returning {} for any or non-schema types. */
-type SafeInferSchema<T> =
-  IsAny<T> extends true
-    ? {}
-    : T extends import('./schema.js').SchemaDefinition
-      ? InferSchema<T>
-      : {};
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type MethodClient<T, HasPathParams extends boolean = false> = T extends RouteDefinition<
-  infer Q,
-  infer B,
-  infer R,
-  any,
-  any
->
-  ? (options?: BuildOptions<HasPathParams, SafeInferSchema<Q>, SafeInferSchema<B>>) => Promise<R>
-  : T extends (...args: unknown[]) => unknown
-    ? (options?: BuildOptions<HasPathParams, {}, {}>) => Promise<ExtractReturn<T>>
-    : never;
-
-type HasParams<Path extends string[]> = Path extends [infer Head, ...infer Rest extends string[]]
-  ? Head extends `$${string}`
-    ? true
-    : HasParams<Rest>
-  : false;
-
-/** Extract the MethodEntry part from a union type. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ExtractMethod<T> = Extract<
-  T,
-  RouteDefinition<any, any, any, any, any> | ((...args: unknown[]) => unknown)
->;
-
-/** Helper to extract return type for implicit GET calls. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ImplicitGetCall<T extends RouterRoutes, Path extends string[] = []> = 'get' extends keyof T
-  ? ExtractMethod<T['get']> extends RouteDefinition<infer _Q, infer _B, infer R, any, any>
-    ? HasParams<Path> extends true
-      ? (
-          options: { path: Record<string, string> } & {
-            query?: Record<string, unknown>;
-          } & LocalClientConfig,
-        ) => Promise<R>
-      : (options?: LocalRequestOptions) => Promise<R>
-    : ExtractMethod<T['get']> extends (...args: unknown[]) => unknown
-      ? HasParams<Path> extends true
-        ? (
-            options: { path: Record<string, string> } & {
-              query?: Record<string, unknown>;
-            } & LocalClientConfig,
-          ) => Promise<ExtractReturn<ExtractMethod<T['get']>>>
-        : (options?: LocalRequestOptions) => Promise<ExtractReturn<ExtractMethod<T['get']>>>
-      : (options?: LocalRequestOptions) => Promise<unknown>
-  : (options?: LocalRequestOptions) => Promise<unknown>;
-
-/** Client type for a router. */
-type RouterClient<T extends RouterRoutes, Path extends string[] = []> = {
-  // Method handlers become callable methods (get, post, etc.).
-  [K in keyof T as K extends HttpMethods ? K : never]: ExtractMethod<T[K]> extends infer M
-    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      M extends RouteDefinition<any, any, any, any, any> | ((...args: unknown[]) => unknown)
-      ? MethodClient<M, HasParams<Path>>
-      : never
-    : never;
-} & {
-  // ALL keys (including lowercase method names) become navigation paths.
-  [K in keyof T as K extends HttpMethods ? never : K]: Extract<
-    T[K],
-    { routes: RouterRoutes }
-  > extends {
-    routes: infer Routes extends RouterRoutes;
-  }
-    ? RouterClient<Routes, [...Path, K & string]> & ImplicitGetCall<Routes, [...Path, K & string]>
-    : never;
-} & ImplicitGetCall<T, Path>;
-
 export type LocalClient<T extends Router<RouterRoutes>> = {
   configure(config: LocalClientConfig): void;
-} & RouterClient<T['routes']>;
+} & RouterClient<T['routes'], LocalClientConfig>;
 
 // =============================================================================
 // Implementation
@@ -258,13 +154,24 @@ export function createLocalClient<T extends Router<RouterRoutes>>(routerDef: T):
     },
   } as LocalClient<T>;
 
+  const proxy = createRecursiveProxy({
+    onRequest: (segments, method, options) => {
+      return invokeHandler(
+        sharedConfig,
+        routerDef,
+        segments,
+        method,
+        options as LocalRequestOptions | undefined,
+      );
+    },
+  });
+
   return new Proxy(client, {
     get(target, prop) {
       if (prop === 'configure') return target.configure;
-      if (typeof prop === 'string') {
-        return createPathProxy(sharedConfig, routerDef, [prop]);
-      }
-      return undefined;
+      // Delegate to recursive proxy for path building
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (proxy as any)[prop];
     },
     apply(_target, _thisArg, args) {
       return invokeHandler(
@@ -276,34 +183,6 @@ export function createLocalClient<T extends Router<RouterRoutes>>(routerDef: T):
       );
     },
   }) as LocalClient<T>;
-}
-
-/** Creates a proxy that tracks path segments. */
-function createPathProxy(
-  sharedConfig: SharedConfig,
-  routerDef: Router<RouterRoutes>,
-  segments: string[],
-): unknown {
-  const callable = (options?: LocalRequestOptions) => {
-    return invokeHandler(sharedConfig, routerDef, segments, 'get', options);
-  };
-
-  return new Proxy(callable, {
-    get(_target, prop) {
-      if (typeof prop !== 'string') return undefined;
-
-      if (HTTP_METHODS.has(prop)) {
-        return (options?: LocalRequestOptions) => {
-          return invokeHandler(sharedConfig, routerDef, segments, prop as Method, options);
-        };
-      }
-
-      return createPathProxy(sharedConfig, routerDef, [...segments, prop]);
-    },
-    apply(_target, _thisArg, args) {
-      return callable(args[0] as LocalRequestOptions | undefined);
-    },
-  });
 }
 
 /** Invokes a handler directly. */

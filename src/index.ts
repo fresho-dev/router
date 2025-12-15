@@ -51,7 +51,7 @@
  * const user = await client.users.$id({ path: { id: '123' } });
  *
  * // Non-GET routes - use explicit method
- * await client.users.post({ body: { name: 'Alice', email: 'alice@example.com' } });
+ * await client.users.$post({ body: { name: 'Alice', email: 'alice@example.com' } });
  * ```
  *
  * ## Exports

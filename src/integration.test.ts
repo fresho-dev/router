@@ -69,7 +69,7 @@ describe('integration tests', () => {
 
     it('sends POST body', async () => {
       const client: AnyClient = createLocalClient(api);
-      const result = await client.users.post({
+      const result = await client.users.$post({
         body: { name: 'Alice', email: 'alice@example.com' },
       });
       const typed = result as { id: number; name: string; email: string };
@@ -85,7 +85,7 @@ describe('integration tests', () => {
     it('handles body validation errors', async () => {
       const client: AnyClient = createLocalClient(api);
       await assert.rejects(
-        async () => client.users.post({ body: { name: 'Alice' } as never }),
+        async () => client.users.$post({ body: { name: 'Alice' } as never }),
         /Invalid request body/,
       );
     });
@@ -98,15 +98,15 @@ describe('integration tests', () => {
       assert.strictEqual((result as { status: string }).status, 'ok');
     });
 
-    it('.get() works for GET routes', async () => {
+    it('.$get() works for GET routes', async () => {
       const client: AnyClient = createLocalClient(api);
-      const result = await client.health.get();
+      const result = await client.health.$get();
       assert.strictEqual((result as { status: string }).status, 'ok');
     });
 
-    it('.post() works for POST routes', async () => {
+    it('.$post() works for POST routes', async () => {
       const client: AnyClient = createLocalClient(api);
-      const result = await client.users.post({
+      const result = await client.users.$post({
         body: { name: 'Bob', email: 'bob@example.com' },
       });
       assert.strictEqual((result as { name: string }).name, 'Bob');

@@ -61,7 +61,7 @@ describe('local-client', () => {
       assert.deepStrictEqual(result, { message: 'hello' });
     });
 
-    it('.get() also invokes handler', async () => {
+    it('.$get() also invokes handler', async () => {
       const client: AnyClient = createLocalClient(
         router({
           test: router({
@@ -70,11 +70,11 @@ describe('local-client', () => {
         }),
       );
 
-      const result = await client.test.get();
+      const result = await client.test.$get();
       assert.deepStrictEqual(result, { message: 'hello' });
     });
 
-    it('.post() invokes handler', async () => {
+    it('.$post() invokes handler', async () => {
       const client: AnyClient = createLocalClient(
         router({
           test: router({
@@ -86,7 +86,7 @@ describe('local-client', () => {
         }),
       );
 
-      const result = await client.test.post({ body: { name: 'bob' } });
+      const result = await client.test.$post({ body: { name: 'bob' } });
       assert.deepStrictEqual(result, { name: 'bob' });
     });
 
@@ -118,7 +118,7 @@ describe('local-client', () => {
         }),
       );
 
-      const result = await client.test.post({ body: { name: 'bob' } });
+      const result = await client.test.$post({ body: { name: 'bob' } });
       assert.deepStrictEqual(result, { name: 'bob' });
     });
 
@@ -153,7 +153,7 @@ describe('local-client', () => {
       );
 
       await assert.rejects(
-        async () => client.test.post({ body: {} as never }),
+        async () => client.test.$post({ body: {} as never }),
         /Invalid request body/,
       );
     });
@@ -270,7 +270,7 @@ describe('local-client', () => {
         }),
       );
 
-      await client.test.post();
+      await client.test.$post();
       assert.strictEqual(capturedMethod, 'POST');
     });
 
@@ -493,7 +493,7 @@ describe('local-client', () => {
       });
 
       const client: AnyClient = createLocalClient(api);
-      const result = (await client.v1.users.post({
+      const result = (await client.v1.users.$post({
         body: { name: 'Alice', age: 30 },
       })) as { greeting: string; nextAge: number };
       assert.strictEqual(result.greeting, 'Hello Alice');
@@ -517,7 +517,7 @@ describe('local-client', () => {
       });
 
       const client: AnyClient = createLocalClient(api);
-      const result = (await client.data.process.post({
+      const result = (await client.data.process.$post({
         query: { multiplier: 3 },
         body: { values: 'ab' },
       })) as { repeated: string };

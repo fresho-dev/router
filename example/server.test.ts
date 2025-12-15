@@ -26,7 +26,7 @@ describe('Todo API', () => {
 
   describe('todos.post (create)', () => {
     it('creates a todo with the given title', async () => {
-      const todo = await client.api.todos.post({ body: { title: 'Test todo' } });
+      const todo = await client.api.todos.$post({ body: { title: 'Test todo' } });
 
       assert.strictEqual(todo.title, 'Test todo');
       assert.strictEqual(todo.completed, false);
@@ -35,8 +35,8 @@ describe('Todo API', () => {
     });
 
     it('assigns incrementing IDs', async () => {
-      const todo1 = await client.api.todos.post({ body: { title: 'First' } });
-      const todo2 = await client.api.todos.post({ body: { title: 'Second' } });
+      const todo1 = await client.api.todos.$post({ body: { title: 'First' } });
+      const todo2 = await client.api.todos.$post({ body: { title: 'Second' } });
 
       assert.strictEqual(todo1.id, '1');
       assert.strictEqual(todo2.id, '2');
@@ -52,8 +52,8 @@ describe('Todo API', () => {
     });
 
     it('returns all todos', async () => {
-      await client.api.todos.post({ body: { title: 'First' } });
-      await client.api.todos.post({ body: { title: 'Second' } });
+      await client.api.todos.$post({ body: { title: 'First' } });
+      await client.api.todos.$post({ body: { title: 'Second' } });
 
       const result = await client.api.todos();
 
@@ -63,9 +63,9 @@ describe('Todo API', () => {
     });
 
     it('filters by completed status', async () => {
-      await client.api.todos.post({ body: { title: 'Incomplete' } });
-      const completed = await client.api.todos.post({ body: { title: 'Done' } });
-      await client.api.todos.$id.patch({ path: { id: completed.id }, body: { completed: true } });
+      await client.api.todos.$post({ body: { title: 'Incomplete' } });
+      const completed = await client.api.todos.$post({ body: { title: 'Done' } });
+      await client.api.todos.$id.$patch({ path: { id: completed.id }, body: { completed: true } });
 
       const pendingResult = await client.api.todos({ query: { completed: false } });
       assert.strictEqual(pendingResult.todos.length, 1);
@@ -79,7 +79,7 @@ describe('Todo API', () => {
 
   describe('todos.$id (get by id)', () => {
     it('returns a todo by ID', async () => {
-      const created = await client.api.todos.post({ body: { title: 'Test' } });
+      const created = await client.api.todos.$post({ body: { title: 'Test' } });
 
       const fetched = await client.api.todos.$id({ path: { id: created.id } });
 
@@ -90,9 +90,9 @@ describe('Todo API', () => {
 
   describe('todos.$id.patch (update)', () => {
     it('updates the title', async () => {
-      const created = await client.api.todos.post({ body: { title: 'Original' } });
+      const created = await client.api.todos.$post({ body: { title: 'Original' } });
 
-      const updated = await client.api.todos.$id.patch({
+      const updated = await client.api.todos.$id.$patch({
         path: { id: created.id },
         body: { title: 'Updated' },
       });
@@ -102,9 +102,9 @@ describe('Todo API', () => {
     });
 
     it('updates the completed status', async () => {
-      const created = await client.api.todos.post({ body: { title: 'Test' } });
+      const created = await client.api.todos.$post({ body: { title: 'Test' } });
 
-      const updated = await client.api.todos.$id.patch({
+      const updated = await client.api.todos.$id.$patch({
         path: { id: created.id },
         body: { completed: true },
       });
@@ -114,9 +114,9 @@ describe('Todo API', () => {
     });
 
     it('updates both title and completed', async () => {
-      const created = await client.api.todos.post({ body: { title: 'Original' } });
+      const created = await client.api.todos.$post({ body: { title: 'Original' } });
 
-      const updated = await client.api.todos.$id.patch({
+      const updated = await client.api.todos.$id.$patch({
         path: { id: created.id },
         body: { title: 'New title', completed: true },
       });
@@ -128,9 +128,9 @@ describe('Todo API', () => {
 
   describe('todos.$id.delete', () => {
     it('deletes a todo', async () => {
-      const created = await client.api.todos.post({ body: { title: 'To delete' } });
+      const created = await client.api.todos.$post({ body: { title: 'To delete' } });
 
-      const result = await client.api.todos.$id.delete({ path: { id: created.id } });
+      const result = await client.api.todos.$id.$delete({ path: { id: created.id } });
       assert.strictEqual(result.deleted, true);
 
       const list = await client.api.todos();
