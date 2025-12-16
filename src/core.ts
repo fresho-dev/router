@@ -78,8 +78,8 @@ import { ROUTE_MARKER, ROUTER_MARKER } from './types.js';
  * ```
  */
 export function route<
-  const Q extends SchemaDefinition,
-  const B extends SchemaDefinition,
+  const Q extends SchemaDefinition = {},
+  const B extends SchemaDefinition = {},
   R = unknown,
 >(definition: RouteDefinition<Q, B, R, {}, {}>): RouteDefinition<Q, B, R, {}, {}> {
   return { ...definition, [ROUTE_MARKER]: true } as RouteDefinition<Q, B, R, {}, {}>;
@@ -87,7 +87,7 @@ export function route<
 
 /** Return type of route.ctx<T>() - callable and chainable. */
 interface CtxBuilder<Ctx> {
-  <const Q extends SchemaDefinition, const B extends SchemaDefinition, R = unknown>(
+  <const Q extends SchemaDefinition = {}, const B extends SchemaDefinition = {}, R = unknown>(
     definition: RouteDefinition<Q, B, R, {}, Ctx>,
   ): RouteDefinition<Q, B, R, {}, Ctx>;
 
@@ -96,7 +96,7 @@ interface CtxBuilder<Ctx> {
 
 /** Creates a chainable context builder. */
 function createCtxBuilder<Ctx>(): CtxBuilder<Ctx> {
-  const builder = <const Q extends SchemaDefinition, const B extends SchemaDefinition, R = unknown>(
+  const builder = <const Q extends SchemaDefinition = {}, const B extends SchemaDefinition = {}, R = unknown>(
     definition: RouteDefinition<Q, B, R, {}, Ctx>,
   ): RouteDefinition<Q, B, R, {}, Ctx> =>
     ({ ...definition, [ROUTE_MARKER]: true }) as RouteDefinition<Q, B, R, {}, Ctx>;
