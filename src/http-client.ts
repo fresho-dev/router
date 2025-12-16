@@ -34,7 +34,7 @@
  */
 
 import { createRecursiveProxy } from './client-proxy.js';
-import type { ExtractMethod, HeaderValue, RequestOptions, RouterClient } from './client-types.js';
+import type { HeaderValue, RequestOptions, RouterClient } from './client-types.js';
 import type { Method, Router, RouterRoutes } from './types.js';
 
 // =============================================================================
