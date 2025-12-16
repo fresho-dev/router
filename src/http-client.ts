@@ -46,6 +46,8 @@ export interface HttpClientConfig {
   baseUrl?: string;
   headers?: Record<string, HeaderValue>;
   credentials?: RequestCredentials;
+  /** Custom fetch implementation for interception or environment-specific behavior. */
+  fetch?: typeof fetch;
 }
 
 /** Extra options for HTTP requests (headers). */
@@ -218,7 +220,8 @@ async function executeRequest(
 
   // Execute.
   const fetchUrl = config.baseUrl ? url.toString() : url.pathname + url.search;
-  const response = await fetch(fetchUrl, init);
+  const fetchFn = config.fetch || fetch;
+  const response = await fetchFn(fetchUrl, init);
 
   if (!response.ok) {
     throw new Error((await response.text()) || response.statusText);
