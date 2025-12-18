@@ -53,6 +53,8 @@ export interface HttpClientConfig {
 /** Extra options for HTTP requests (headers). */
 export interface HttpExtraOptions {
   headers?: HeadersInit;
+  /** If true, returns the raw Response object instead of parsing as JSON. */
+  raw?: boolean;
 }
 
 /** Options for an HTTP request. */
@@ -225,6 +227,10 @@ async function executeRequest(
 
   if (!response.ok) {
     throw new Error((await response.text()) || response.statusText);
+  }
+
+  if (options?.raw) {
+    return response;
   }
 
   return response.json();
