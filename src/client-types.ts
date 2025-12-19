@@ -35,13 +35,15 @@ export type IsAny<T> = 0 extends 1 & T ? true : false;
 export type RequiresProperty<T> =
   IsAny<T> extends true ? false : keyof T extends never ? false : true;
 
-/** Safely infer schema, returning {} for any or non-schema types. */
+/** Safely infer schema, returning {} for any, empty, or non-schema types. */
 export type SafeInferSchema<T> =
   IsAny<T> extends true
     ? {}
-    : T extends import('./schema.js').SchemaDefinition
-      ? InferSchema<T>
-      : {};
+    : keyof T extends never
+      ? {}
+      : T extends import('./schema.js').SchemaDefinition
+        ? InferSchema<T>
+        : {};
 
 /** Check if router tree contains any $param properties. */
 export type HasParams<Path extends string[]> = Path extends [
