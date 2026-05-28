@@ -9,7 +9,16 @@ import { createHandler } from '../handler.js';
 import { createHttpClient } from '../http-client.js';
 import type { Middleware } from '../middleware.js';
 import type { FetchHandler } from '../types.js';
-import { basicAuth, cors, errorHandler, jwtAuth, jwtSign, requestId } from './index.js';
+import {
+  basicAuth,
+  cookies,
+  cors,
+  errorHandler,
+  jwtAuth,
+  jwtSign,
+  requestId,
+  type SetCookie,
+} from './index.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -591,6 +600,64 @@ describe('Middleware Integration', () => {
       assert.strictEqual(response.status, 200);
       const body = await response.json();
       assert.strictEqual(body.userId, 'user-123');
+    });
+  });
+
+  describe('Cookies Integration', () => {
+    it('should read request cookies and set response cookies on a typed route', async () => {
+      const apiRouter = router(
+        {
+          session: router({
+            get: route.ctx<{ cookies: Record<string, string>; setCookie: SetCookie }>()({
+              handler: async (c) => {
+                const userId = c.cookies['user'] ?? 'generated';
+                c.setCookie('user', userId, { httpOnly: true, sameSite: 'lax', path: '/' });
+                c.setCookie('seen', '1');
+                return { userId };
+              },
+            }),
+          }),
+        },
+        cookies(),
+      );
+
+      const handler = createHandler(apiRouter);
+
+      // Existing cookie is read from the request.
+      const response = await handler(
+        new Request('http://localhost/session', {
+          headers: { Cookie: 'user=alice; theme=dark' },
+        }),
+      );
+
+      assert.strictEqual(response.status, 200);
+      assert.deepStrictEqual(await response.json(), { userId: 'alice' });
+
+      // Each setCookie call produces its own Set-Cookie header.
+      assert.deepStrictEqual(response.headers.getSetCookie(), [
+        'user=alice; Path=/; HttpOnly; SameSite=Lax',
+        'seen=1',
+      ]);
+    });
+
+    it('should default cookies to an empty map when none are sent', async () => {
+      const apiRouter = router(
+        {
+          session: router({
+            get: route.ctx<{ cookies: Record<string, string>; setCookie: SetCookie }>()({
+              handler: async (c) => ({ userId: c.cookies['user'] ?? 'generated' }),
+            }),
+          }),
+        },
+        cookies(),
+      );
+
+      const handler = createHandler(apiRouter);
+      const response = await handler(new Request('http://localhost/session'));
+
+      assert.strictEqual(response.status, 200);
+      assert.deepStrictEqual(await response.json(), { userId: 'generated' });
+      assert.strictEqual(response.headers.getSetCookie().length, 0);
     });
   });
 
