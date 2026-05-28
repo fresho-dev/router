@@ -25,6 +25,12 @@ export interface RecursiveProxyOptions {
    * @param options - The arguments passed to the method execution (e.g. { query, body }).
    */
   onRequest: (segments: string[], method: Method, options?: unknown) => Promise<unknown>;
+  /**
+   * Callback to build a URL string without executing a request, invoked on `$url`.
+   * @param segments - The path segments accumulated so far.
+   * @param options - The arguments passed to `$url` (e.g. { path, query }).
+   */
+  onBuildUrl?: (segments: string[], options?: unknown) => string;
 }
 
 /**
@@ -63,6 +69,11 @@ export function createRecursiveProxy(
       ) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return (_target as any)[prop];
+      }
+
+      // The `$url` trap builds a URL string synchronously instead of firing a request.
+      if (prop === '$url' && config.onBuildUrl) {
+        return (options?: unknown) => config.onBuildUrl!(segments, options);
       }
 
       // Check if this property is a method trap.

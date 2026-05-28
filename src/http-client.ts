@@ -134,6 +134,8 @@ export function createHttpClient<T extends Router<RouterRoutes>>(
         options as HttpRequestOptions,
       );
     },
+    onBuildUrl: (segments, options) =>
+      buildUrl(sharedConfig.current, segments, options as HttpRequestOptions | undefined),
   });
 
   return new Proxy(client, {
@@ -170,6 +172,36 @@ function buildPath(segments: string[], pathParams?: Record<string, string>): str
   return `/${parts.join('/')}`;
 }
 
+/**
+ * Builds a URL string from path segments and options without executing a request.
+ *
+ * Returns an absolute URL when a `baseUrl` is configured, otherwise a relative
+ * `pathname + search` string suitable for same-origin fetches.
+ */
+function buildUrl(
+  config: HttpClientConfig,
+  segments: string[],
+  options?: HttpRequestOptions,
+): string {
+  const path = buildPath(segments, options?.path);
+
+  // Resolve the base, falling back to the browser origin when available.
+  const baseUrl = config.baseUrl || (typeof window !== 'undefined' ? window.location?.origin : '');
+  const url = new URL(path, baseUrl || 'http://localhost');
+
+  // Add query params, skipping undefined values.
+  if (options?.query) {
+    for (const [key, value] of Object.entries(options.query)) {
+      if (value !== undefined) {
+        url.searchParams.set(key, String(value));
+      }
+    }
+  }
+
+  // Use an absolute URL only when a baseUrl was configured.
+  return config.baseUrl ? url.toString() : url.pathname + url.search;
+}
+
 /** Executes an HTTP request. */
 async function executeRequest(
   sharedConfig: SharedConfig,
@@ -178,20 +210,6 @@ async function executeRequest(
   options?: HttpRequestOptions,
 ): Promise<unknown> {
   const config = sharedConfig.current;
-  const path = buildPath(segments, options?.path);
-
-  // Build URL.
-  const baseUrl = config.baseUrl || (typeof window !== 'undefined' ? window.location?.origin : '');
-  const url = new URL(path, baseUrl || 'http://localhost');
-
-  // Add query params.
-  if (options?.query) {
-    for (const [key, value] of Object.entries(options.query)) {
-      if (value !== undefined) {
-        url.searchParams.set(key, String(value));
-      }
-    }
-  }
 
   // Build headers.
   const headers = new Headers();
@@ -221,7 +239,7 @@ async function executeRequest(
   }
 
   // Execute.
-  const fetchUrl = config.baseUrl ? url.toString() : url.pathname + url.search;
+  const fetchUrl = buildUrl(config, segments, options);
   const fetchFn = config.fetch || fetch;
   const response = await fetchFn(fetchUrl, init);
 

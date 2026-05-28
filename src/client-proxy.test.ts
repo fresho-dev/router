@@ -98,6 +98,26 @@ describe('client-proxy', () => {
       assert.strictEqual(proxy.toString, Function.prototype.toString);
     });
 
+    it('traps $url and invokes onBuildUrl synchronously', () => {
+      let lastSegments: string[] = [];
+      let lastOptions: unknown;
+
+      const proxy = createRecursiveProxy({
+        onRequest: async () => {},
+        onBuildUrl: (segments, options) => {
+          lastSegments = segments;
+          lastOptions = options;
+          return '/built/url';
+        },
+      } as RecursiveProxyOptions) as any;
+
+      const result = proxy.foo.bar.$url({ query: { a: 1 } });
+
+      assert.strictEqual(result, '/built/url');
+      assert.deepStrictEqual(lastSegments, ['foo', 'bar']);
+      assert.deepStrictEqual(lastOptions, { query: { a: 1 } });
+    });
+
     it('allows using apply() to invoke the proxy function (implicit GET)', async () => {
       let triggered = false;
       let lastSegments: string[] = [];

@@ -524,4 +524,37 @@ describe('local-client', () => {
       assert.strictEqual(result.repeated, 'ababab');
     });
   });
+
+  describe('$url builder', () => {
+    it('builds a relative URL from the property chain', () => {
+      const api = router({ media: router({ playlist: router({ get: async () => ({}) }) }) });
+      const client: AnyClient = createLocalClient(api);
+
+      assert.strictEqual(client.media.playlist.$url(), '/media/playlist');
+    });
+
+    it('substitutes path params and appends query', () => {
+      const api = router({ users: router({ $id: router({ get: async () => ({}) }) }) });
+      const client: AnyClient = createLocalClient(api);
+
+      const url = client.users.$id.$url({ path: { id: '123' }, query: { verbose: true } });
+      assert.strictEqual(url, '/users/123?verbose=true');
+    });
+
+    it('does not invoke the handler', () => {
+      let called = false;
+      const api = router({
+        items: router({
+          get: async () => {
+            called = true;
+            return {};
+          },
+        }),
+      });
+      const client: AnyClient = createLocalClient(api);
+
+      client.items.$url();
+      assert.strictEqual(called, false);
+    });
+  });
 });

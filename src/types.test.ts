@@ -313,6 +313,29 @@ describe('types', () => {
 
       assert.ok(true);
     });
+
+    it('$url is a string builder that enforces path params at compile time', () => {
+      const api = router({
+        media: router({ playlist: router({ get: async () => ({}) }) }),
+        users: router({ $id: router({ get: async () => ({}) }) }),
+      });
+
+      const client = createHttpClient<typeof api>({ baseUrl: 'http://test.com' });
+
+      // $url returns a string, not a Promise.
+      const url: string = client.media.playlist.$url({ query: { channel: 'classics' } });
+      assert.strictEqual(typeof url, 'string');
+
+      // Paths with $params require the path option.
+      const withParam: string = client.users.$id.$url({ path: { id: '123' } });
+      assert.strictEqual(typeof withParam, 'string');
+
+      // Compile-time only: path is required when the route has $params.
+      const _missingPath = () =>
+        // @ts-expect-error - path is required when the route has $params.
+        client.users.$id.$url();
+      void _missingPath;
+    });
   });
 
   describe('RouterBrand', () => {

@@ -164,6 +164,8 @@ export function createLocalClient<T extends Router<RouterRoutes>>(routerDef: T):
         options as LocalRequestOptions | undefined,
       );
     },
+    onBuildUrl: (segments, options) =>
+      buildLocalUrl(segments, options as LocalRequestOptions | undefined),
   });
 
   return new Proxy(client, {
@@ -183,6 +185,33 @@ export function createLocalClient<T extends Router<RouterRoutes>>(routerDef: T):
       );
     },
   }) as LocalClient<T>;
+}
+
+/**
+ * Builds a relative URL string from path segments and options.
+ *
+ * The local client has no baseUrl, so it returns a relative `pathname + search`
+ * string. Mirrors the synthetic URL construction used in {@link invokeHandler}.
+ */
+function buildLocalUrl(segments: string[], options?: LocalRequestOptions): string {
+  const pathParams = collectPathParams(segments, options?.path);
+
+  // Substitute $param segments with their encoded values.
+  const pathParts = segments.map((s) =>
+    s.startsWith('$') ? encodeURIComponent(pathParams[s.slice(1)]) : s,
+  );
+  const url = new URL(`/${pathParts.join('/')}`, 'http://localhost');
+
+  // Add query params, skipping undefined values.
+  if (options?.query) {
+    for (const [key, value] of Object.entries(options.query)) {
+      if (value !== undefined) {
+        url.searchParams.set(key, String(value));
+      }
+    }
+  }
+
+  return url.pathname + url.search;
 }
 
 /** Invokes a handler directly. */
