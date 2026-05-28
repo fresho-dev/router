@@ -131,8 +131,22 @@ export type ImplicitGetCall<
       : (options?: RequestOptions<Extra>) => Promise<unknown>
   : (options?: RequestOptions<Extra>) => Promise<unknown>;
 
+/**
+ * Builds a URL string from the route path without executing a request.
+ *
+ * Path params are required when the path contains `$param` segments. Query
+ * params are always optional and untyped, since `$url` is method-agnostic.
+ */
+export type UrlMethod<Path extends string[]> =
+  HasParams<Path> extends true
+    ? (options: { path: Record<string, string>; query?: Record<string, unknown> }) => string
+    : (options?: { query?: Record<string, unknown> }) => string;
+
 /** Client type for a router. */
 export type RouterClient<T extends RouterRoutes, Extra, Path extends string[] = []> = {
+  // Non-executing URL builder, available on every path node.
+  $url: UrlMethod<Path>;
+} & {
   // Method handlers become $-prefixed callable methods ($get, $post, etc.).
   [K in keyof RemoveIndex<T> as K extends LowercaseMethods
     ? PrefixedMethod<K>

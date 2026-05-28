@@ -295,6 +295,25 @@ client.api.get.$get();   // GET /api/get (navigate to "get", then execute GET)
 
 This allows routes with path segments named after HTTP methods (e.g., `/api/get`, `/resources/delete`).
 
+### Building URLs Without Fetching
+
+Use `$url` to derive a URL string from the typed routes without firing a request. It accepts the same `path`/`query` options as a real call, so path params stay type-checked:
+
+```typescript
+// Absolute URL when baseUrl is configured:
+client.media.playlist.$url({ query: { channel: "classics", chunks: 1 } });
+// → "https://api.example.com/media/playlist?channel=classics&chunks=1"
+
+client.users.$id.$url({ path: { id: "123" } });
+// → "https://api.example.com/users/123"
+
+// Relative URL (pathname + search) when no baseUrl is set:
+createHttpClient<typeof api>({}).users.$id.$url({ path: { id: "123" } });
+// → "/users/123"
+```
+
+This keeps route paths as the single source of truth for URLs embedded in response bodies, deep links, or server-side URL generation — cases where `raw: true` can't help, since `Response.url` only exists after a request runs.
+
 ## Local Client
 
 Test handlers directly without HTTP overhead:

@@ -461,5 +461,81 @@ describe('http-client', () => {
         assert.strictEqual(url, 'http://test.com/users/hello%20world');
       });
     });
+
+    describe('$url builder', () => {
+      it('builds an absolute URL from the property chain', () => {
+        const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
+
+        const url = client.media.playlist.$url();
+
+        assert.strictEqual(url, 'http://test.com/media/playlist');
+      });
+
+      it('substitutes $param path params', () => {
+        const api = router({
+          users: router({
+            $id: router({ get: async (c) => ({ id: c.path.id }) }),
+          }),
+        });
+
+        const client = createHttpClient<typeof api>({ baseUrl: 'http://test.com' });
+
+        const url = client.users.$id.$url({ path: { id: '123' } });
+
+        assert.strictEqual(url, 'http://test.com/users/123');
+      });
+
+      it('appends query params', () => {
+        const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
+
+        const url = client.media.playlist.$url({ query: { channel: 'classics', chunks: 1 } });
+
+        assert.strictEqual(url, 'http://test.com/media/playlist?channel=classics&chunks=1');
+      });
+
+      it('omits undefined query params', () => {
+        const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
+
+        const url = client.test.$url({ query: { a: 'hello', b: undefined } });
+
+        assert.strictEqual(url, 'http://test.com/test?a=hello');
+      });
+
+      it('returns a relative URL when no baseUrl is set', () => {
+        const client: AnyClient = createHttpClient({});
+
+        const url = client.api.test.$url({ query: { a: '1' } });
+
+        assert.strictEqual(url, '/api/test?a=1');
+      });
+
+      it('encodes path params', () => {
+        const api = router({
+          users: router({
+            $id: router({ get: async (c) => ({ id: c.path.id }) }),
+          }),
+        });
+
+        const client = createHttpClient<typeof api>({ baseUrl: 'http://test.com' });
+
+        const url = client.users.$id.$url({ path: { id: 'hello world' } });
+
+        assert.strictEqual(url, 'http://test.com/users/hello%20world');
+      });
+
+      it('does not fire a request', (t) => {
+        const fetchMock = t.mock.method(
+          globalThis,
+          'fetch',
+          async () => new Response(JSON.stringify({})),
+        );
+
+        const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
+
+        client.media.playlist.$url();
+
+        assert.strictEqual(fetchMock.mock.calls.length, 0);
+      });
+    });
   });
 });
