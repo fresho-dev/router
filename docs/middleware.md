@@ -18,6 +18,7 @@
   - [Request ID](#requestid)
   - [Timeout](#timeout)
   - [Content Type Validation](#contenttype)
+  - [Cookies](#cookies)
 - [Middleware Utilities](#middleware-utilities)
   - [compose](#compose)
 
@@ -419,6 +420,48 @@ contentType({
 ```
 
 Returns 415 Unsupported Media Type on mismatch.
+
+---
+
+### cookies
+
+Parses request cookies into the context and lets handlers set response cookies.
+Serialization follows RFC 6265 and uses only Web APIs (no third-party `cookie`
+dependency).
+
+```typescript
+cookies()
+```
+
+Sets `ctx.cookies` (a `Record<string, string>`) from the request `Cookie`
+header and installs `ctx.setCookie(name, value, options?)`. Each `setCookie`
+call appends a separate `Set-Cookie` header, so a handler may set several
+cookies.
+
+```typescript
+import { cookies, type SetCookie } from '@fresho/router/middleware';
+
+const api = router(
+  {
+    session: router({
+      get: route.ctx<{ cookies: Record<string, string>; setCookie: SetCookie }>()({
+        handler: async (c) => {
+          const userId = c.cookies['user'] ?? crypto.randomUUID();
+          c.setCookie('user', userId, { httpOnly: true, sameSite: 'lax', path: '/' });
+          return { userId };
+        },
+      }),
+    }),
+  },
+  cookies(),
+);
+```
+
+`setCookie` options: `maxAge` (seconds → `Max-Age`), `expires` (`Date` →
+`Expires`), `path`, `domain`, `secure`, `httpOnly`, and `sameSite`
+(`'strict' | 'lax' | 'none'`). The standalone `parseCookies(header)` and
+`serializeCookie(name, value, options?)` helpers are also exported for use
+outside the middleware.
 
 ---
 

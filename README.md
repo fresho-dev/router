@@ -210,7 +210,7 @@ const api = router(
 );
 ```
 
-Built-in middleware: `cors`, `errorHandler`, `logger`, `rateLimit`, `requestId`, `timeout`, `basicAuth`, `bearerAuth`, `jwtAuth`, `contentType`.
+Built-in middleware: `cors`, `errorHandler`, `logger`, `rateLimit`, `requestId`, `timeout`, `basicAuth`, `bearerAuth`, `jwtAuth`, `contentType`, `cookies`.
 
 See **[Middleware Documentation](docs/middleware.md)** for detailed usage.
 

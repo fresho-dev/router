@@ -10,6 +10,7 @@
  * - **Request ID** - Add unique identifiers to requests for tracing
  * - **Timeout** - Abort requests that take too long
  * - **Content Type** - Validate request content types
+ * - **Cookies** - Parse request cookies and set response cookies
  *
  * Import via: `import { cors, jwtAuth, ... } from '@fresho/router/middleware';`
  *
@@ -64,6 +65,9 @@ export {
   requestId,
   timeout,
 } from './common.js';
+// Cookie middleware
+export type { CookieOptions, SetCookie } from './cookies.js';
+export { cookies, parseCookies, serializeCookie } from './cookies.js';
 // CORS middleware
 export type { CorsOptions } from './cors.js';
 export { cors } from './cors.js';
