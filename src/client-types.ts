@@ -1,5 +1,5 @@
 import type { InferSchema } from './schema.js';
-import type { RouteDefinition, Router, RouterRoutes } from './types.js';
+import type { CollectPathParams, RouteDefinition, Router, RouterRoutes } from './types.js';
 
 // =============================================================================
 // Shared Utility Types
@@ -56,11 +56,12 @@ export type HasParams<Path extends string[]> = Path extends [
   : false;
 
 /** Extract the MethodEntry part from a union type. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type ExtractMethod<T> = Extract<
-  T,
-  RouteDefinition<any, any, any, any, any> | ((...args: unknown[]) => unknown)
->;
+export type ExtractMethod<T> =
+  T extends RouteDefinition<infer _Q, infer _B, infer _R, infer _P, infer _Ctx>
+    ? T
+    : T extends (...args: unknown[]) => unknown
+      ? T
+      : never;
 
 /** Remove string/number index signatures from a type. */
 export type RemoveIndex<T> = {
@@ -87,8 +88,8 @@ export interface BaseRequestOptions {
 export type RequestOptions<Extra> = BaseRequestOptions & Extra;
 
 /** Build options type based on whether path params are needed. */
-export type BuildOptions<HasPathParams extends boolean, Q, B, Extra> = HasPathParams extends true
-  ? { path: Record<string, string> } & (RequiresProperty<Q> extends true ? { query?: Q } : {}) &
+export type BuildOptions<Path extends string[], Q, B, Extra> = HasParams<Path> extends true
+  ? { path: CollectPathParams<Path> } & (RequiresProperty<Q> extends true ? { query?: Q } : {}) &
       (RequiresProperty<B> extends true ? { body: B } : {}) &
       Extra
   : (RequiresProperty<Q> extends true ? { query?: Q } : {}) &
@@ -96,36 +97,44 @@ export type BuildOptions<HasPathParams extends boolean, Q, B, Extra> = HasPathPa
       Extra;
 
 /** Client type for a method entry (route or bare function). */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type MethodClient<
-  T,
-  Extra,
-  HasPathParams extends boolean = false,
-> = T extends RouteDefinition<infer Q, infer B, infer R, any, any>
-  ? (
-      options?: BuildOptions<HasPathParams, SafeInferSchema<Q>, SafeInferSchema<B>, Extra>,
-    ) => Promise<R>
+export type MethodClient<T, Extra, Path extends string[] = []> = T extends RouteDefinition<
+  infer Q,
+  infer B,
+  infer R,
+  infer _P,
+  infer _Ctx
+>
+  ? (options?: BuildOptions<Path, SafeInferSchema<Q>, SafeInferSchema<B>, Extra>) => Promise<R>
   : T extends (...args: unknown[]) => unknown
-    ? (options?: BuildOptions<HasPathParams, {}, {}, Extra>) => Promise<ExtractReturn<T>>
+    ? (options?: BuildOptions<Path, {}, {}, Extra>) => Promise<ExtractReturn<T>>
     : never;
 
 /** Helper to extract return type for implicit GET calls. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type ImplicitGetCall<
   T extends RouterRoutes,
   Extra,
   Path extends string[] = [],
 > = 'get' extends keyof T
-  ? ExtractMethod<T['get']> extends RouteDefinition<infer _Q, infer _B, infer R, any, any>
+  ? ExtractMethod<T['get']> extends RouteDefinition<
+      infer _Q,
+      infer _B,
+      infer R,
+      infer _P,
+      infer _Ctx
+    >
     ? HasParams<Path> extends true
       ? (
-          options: { path: Record<string, string> } & { query?: Record<string, unknown> } & Extra,
+          options: { path: CollectPathParams<Path> } & {
+            query?: Record<string, unknown>;
+          } & Extra,
         ) => Promise<R>
       : (options?: RequestOptions<Extra>) => Promise<R>
     : ExtractMethod<T['get']> extends (...args: unknown[]) => unknown
       ? HasParams<Path> extends true
         ? (
-            options: { path: Record<string, string> } & { query?: Record<string, unknown> } & Extra,
+            options: { path: CollectPathParams<Path> } & {
+              query?: Record<string, unknown>;
+            } & Extra,
           ) => Promise<ExtractReturn<ExtractMethod<T['get']>>>
         : (options?: RequestOptions<Extra>) => Promise<ExtractReturn<ExtractMethod<T['get']>>>
       : (options?: RequestOptions<Extra>) => Promise<unknown>
@@ -139,7 +148,7 @@ export type ImplicitGetCall<
  */
 export type UrlMethod<Path extends string[]> =
   HasParams<Path> extends true
-    ? (options: { path: Record<string, string>; query?: Record<string, unknown> }) => string
+    ? (options: { path: CollectPathParams<Path>; query?: Record<string, unknown> }) => string
     : (options?: { query?: Record<string, unknown> }) => string;
 
 /** Client type for a router. */
@@ -150,17 +159,12 @@ export type RouterClient<T extends RouterRoutes, Extra, Path extends string[] = 
   // Method handlers become $-prefixed callable methods ($get, $post, etc.).
   [K in keyof RemoveIndex<T> as K extends LowercaseMethods
     ? PrefixedMethod<K>
-    : never]: ExtractMethod<T[K]> extends infer M
-    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      M extends RouteDefinition<any, any, any, any, any> | ((...args: unknown[]) => unknown)
-      ? MethodClient<M, Extra, HasParams<Path>>
-      : never
-    : never;
+    : never]: MethodClient<ExtractMethod<T[K]>, Extra, Path>;
 } & {
   // ALL keys (including lowercase method names) become navigation paths.
   [K in keyof RemoveIndex<T>]: IsAny<T[K]> extends true
     ? never
-    : Extract<T[K], Router<any>> extends infer R
+    : Extract<T[K], Router<RouterRoutes>> extends infer R
       ? R extends Router<infer Routes>
         ? RouterClient<Routes, Extra, [...Path, K & string]> &
             ImplicitGetCall<Routes, Extra, [...Path, K & string]>

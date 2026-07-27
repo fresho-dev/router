@@ -338,6 +338,96 @@ describe('types', () => {
     });
   });
 
+  describe('Typed client path parameters', () => {
+    const api = router({
+      items: router({
+        $id: router({
+          get: async () => ({ ok: true }),
+          resign: router({
+            post: route({
+              body: { color: 'string' },
+              handler: async () => ({ ok: true }),
+            }),
+          }),
+        }),
+      }),
+      organizations: router({
+        $organizationId: router({
+          items: router({
+            $itemId: router({
+              get: async () => ({ ok: true }),
+            }),
+          }),
+        }),
+      }),
+    });
+
+    const httpClient = createHttpClient<typeof api>({});
+    const localClient = createLocalClient(api);
+
+    it('accepts the declared path parameter names', () => {
+      const _httpExplicit = () =>
+        httpClient.items.$id.resign.$post({
+          path: { id: 'item-1' },
+          body: { color: 'white' },
+        });
+      const _localExplicit = () =>
+        localClient.items.$id.resign.$post({
+          path: { id: 'item-1' },
+          body: { color: 'white' },
+        });
+      const _implicit = () =>
+        httpClient.organizations.$organizationId.items.$itemId({
+          path: { organizationId: 'org-1', itemId: 'item-1' },
+        });
+      const url = httpClient.organizations.$organizationId.items.$itemId.$url({
+        path: { organizationId: 'org-1', itemId: 'item-1' },
+      });
+
+      void _httpExplicit;
+      void _localExplicit;
+      void _implicit;
+      assert.strictEqual(url, '/organizations/org-1/items/item-1');
+    });
+
+    it('rejects missing, wrong, and excess path parameter names', () => {
+      const _missingPath = () =>
+        // @ts-expect-error Path parameters are required.
+        httpClient.items.$id.resign.$post({ body: { color: 'white' } });
+      const _wrongHttpPath = () =>
+        httpClient.items.$id.resign.$post({
+          // @ts-expect-error The route requires an `id` path parameter.
+          path: { totallyWrongName: 'item-1' },
+          body: { color: 'white' },
+        });
+      const _wrongLocalPath = () =>
+        localClient.items.$id.resign.$post({
+          // @ts-expect-error Local clients use the same exact path parameter names.
+          path: { totallyWrongName: 'item-1' },
+          body: { color: 'white' },
+        });
+      const _excessPath = () =>
+        // @ts-expect-error Object literals cannot include undeclared path parameters.
+        httpClient.items.$id({ path: { id: 'item-1', extra: 'value' } });
+      const _wrongUrlPath = () =>
+        // @ts-expect-error URL builders use the declared path parameter names.
+        httpClient.items.$id.$url({ path: { itemId: 'item-1' } });
+      const _incompleteMultiPath = () =>
+        httpClient.organizations.$organizationId.items.$itemId({
+          // @ts-expect-error Both path parameters are required.
+          path: { organizationId: 'org-1' },
+        });
+
+      void _missingPath;
+      void _wrongHttpPath;
+      void _wrongLocalPath;
+      void _excessPath;
+      void _wrongUrlPath;
+      void _incompleteMultiPath;
+      assert.ok(true);
+    });
+  });
+
   describe('RouterBrand', () => {
     it('Router extends RouterBrand for cross-module type inference', () => {
       // Create a sub-router (simulates import from another module).
