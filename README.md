@@ -278,6 +278,23 @@ await client.users.$get();                    // GET /users
 await client.users.$post({ body: { name: "Bob" } }); // POST /users
 ```
 
+### Routers Built by a Factory
+
+If your router is created inside a factory so its handlers can close over injected dependencies,
+derive the API type from the factory's return type. The type-only import keeps server code out of the
+client bundle:
+
+```typescript
+import { createHttpClient } from "@fresho/router";
+import type { createServer } from "./server";
+
+type Api = ReturnType<typeof createServer>["api"];
+
+const client = createHttpClient<Api>({
+	baseUrl: "https://api.example.com",
+});
+```
+
 ### HTTP Method Syntax
 
 HTTP methods are prefixed with `$` to distinguish them from path navigation:

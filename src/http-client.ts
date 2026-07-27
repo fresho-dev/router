@@ -113,6 +113,18 @@ const BODY_METHODS = new Set(['post', 'put', 'patch']);
  * // GET /api/get
  * await client.api.get.$get();
  * ```
+ *
+ * @example Router built by a dependency-injected factory:
+ * ```typescript
+ * import type { createServer } from './server';
+ * import { createHttpClient } from '@fresho/router';
+ *
+ * type Api = ReturnType<typeof createServer>['api'];
+ *
+ * const client = createHttpClient<Api>({
+ *   baseUrl: 'https://api.example.com',
+ * });
+ * ```
  */
 export function createHttpClient<T extends Router<RouterRoutes>>(
   config: HttpClientConfig = {},
