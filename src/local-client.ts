@@ -20,6 +20,7 @@
  */
 
 import { createRecursiveProxy } from './client-proxy.js';
+import { parseClientResponse } from './client-response.js';
 import type { RequestOptions, RouterClient } from './client-types.js';
 import { compileSchema } from './schema.js';
 import type { ExecutionContext, RouteDefinition, Router, RouterRoutes } from './types.js';
@@ -292,7 +293,7 @@ async function invokeHandler(
 
   // Parse response if needed.
   if (result instanceof Response) {
-    return result.json();
+    return parseClientResponse(result);
   }
 
   return result;

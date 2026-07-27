@@ -34,6 +34,7 @@
  */
 
 import { createRecursiveProxy } from './client-proxy.js';
+import { parseClientResponse } from './client-response.js';
 import type { HeaderValue, RequestOptions, RouterClient } from './client-types.js';
 import type { Method, Router, RouterRoutes } from './types.js';
 
@@ -259,9 +260,5 @@ async function executeRequest(
     throw new Error((await response.text()) || response.statusText);
   }
 
-  if (options?.raw) {
-    return response;
-  }
-
-  return response.json();
+  return parseClientResponse(response, options?.raw);
 }

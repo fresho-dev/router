@@ -2,6 +2,7 @@ import assert from 'node:assert';
 import { describe, it } from 'node:test';
 import { route, router } from './core.js';
 import { createLocalClient } from './local-client.js';
+import { sseResponse, streamJsonLines } from './streaming.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -46,6 +47,45 @@ describe('local-client', () => {
 
       const result = await client.test();
       assert.deepStrictEqual(result, { message: 'hello' });
+    });
+
+    it('returns SSE responses without parsing them as JSON', async () => {
+      const api = router({
+        events: router({
+          get: async () =>
+            sseResponse((send, close) => {
+              send({ event: 'update', data: { count: 1 } });
+              close();
+            }),
+        }),
+      });
+      const client = createLocalClient(api);
+
+      const response = await client.events();
+
+      assert.ok(response instanceof Response);
+      assert.strictEqual(response.headers.get('Content-Type'), 'text/event-stream');
+      assert.match(await response.text(), /event: update/);
+    });
+
+    it('returns NDJSON responses without parsing them as JSON', async () => {
+      const api = router({
+        export: router({
+          get: async () =>
+            streamJsonLines((send, close) => {
+              send({ id: 1 });
+              send({ id: 2 });
+              close();
+            }),
+        }),
+      });
+      const client = createLocalClient(api);
+
+      const response = await client.export();
+
+      assert.ok(response instanceof Response);
+      assert.strictEqual(response.headers.get('Content-Type'), 'application/x-ndjson');
+      assert.strictEqual(await response.text(), '{"id":1}\n{"id":2}\n');
     });
 
     it('direct call invokes handler (GET default)', async () => {

@@ -393,6 +393,9 @@ The event map checks event names and their corresponding payloads. The reserved 
 events that omit the `event` field. Export the map for consumers, or extract it from a typed client
 method with `SSEEventsOf<ReturnType<typeof client.events>>`.
 
+HTTP and local clients return streaming routes as raw `Response` objects instead of parsing their
+bodies as JSON.
+
 ### JSON Lines
 
 ```typescript
