@@ -39,7 +39,7 @@ export default { fetch: api.handler() };
 
 ## Features
 
-- **Type-safe path params** — `$id` creates dynamic segments, typed via `route.ctx<>()`
+- **Type-safe path params** — `$id` creates dynamic segments whose names are inferred by handlers and clients
 - **Schema validation** — query and body validated at runtime, typed at compile time
 - **Property-based routing** — property names become URL segments
 - **Typed HTTP client** — call your API with full type safety
@@ -278,6 +278,9 @@ await client.users.$get();                    // GET /users
 await client.users.$post({ body: { name: "Bob" } }); // POST /users
 ```
 
+The `$id` segment determines the `id` key in the client's `path` option, so missing or misspelled
+parameter names are caught at compile time.
+
 ### Routers Built by a Factory
 
 If your router is created inside a factory so its handlers can close over injected dependencies,
@@ -314,7 +317,9 @@ This allows routes with path segments named after HTTP methods (e.g., `/api/get`
 
 ### Building URLs Without Fetching
 
-Use `$url` to derive a URL string from the typed routes without firing a request. It accepts the same `path`/`query` options as a real call, so path params stay type-checked:
+Use `$url` to derive a URL string from the typed routes without firing a request. It accepts the
+same `path`/`query` options as a real call, including the parameter names inferred from `$id`
+segments:
 
 ```typescript
 // Absolute URL when baseUrl is configured:
@@ -391,10 +396,16 @@ events: router({
 
 The event map checks event names and their corresponding payloads. The reserved `message` key types
 events that omit the `event` field. Export the map for consumers, or extract it from a typed client
-method with `SSEEventsOf<ReturnType<typeof client.events>>`.
+method:
+
+```typescript
+import type { SSEEventsOf } from "@fresho/router";
+
+type ClientEvents = SSEEventsOf<ReturnType<typeof client.events>>;
+```
 
 HTTP and local clients return streaming routes as raw `Response` objects instead of parsing their
-bodies as JSON.
+bodies as JSON, so callers can consume `response.body` as data arrives.
 
 ### JSON Lines
 
