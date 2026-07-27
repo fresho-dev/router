@@ -372,15 +372,26 @@ const docs = router({
 ```typescript
 import { sseResponse } from "@fresho/router";
 
+export interface ItemEvents {
+	message: { connected: boolean };
+	update: { count: number };
+	removed: { id: string };
+}
+
 events: router({
 	get: async () =>
-		sseResponse(async (send, close) => {
-			send({ data: "connected" });
+		sseResponse<ItemEvents>(async (send, close) => {
+			send({ data: { connected: true } });
 			send({ event: "update", data: { count: 1 } });
+			send({ event: "removed", data: { id: "item-1" } });
 			close();
 		}),
 });
 ```
+
+The event map checks event names and their corresponding payloads. The reserved `message` key types
+events that omit the `event` field. Export the map for consumers, or extract it from a typed client
+method with `SSEEventsOf<ReturnType<typeof client.events>>`.
 
 ### JSON Lines
 

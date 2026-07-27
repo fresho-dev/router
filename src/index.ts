@@ -101,7 +101,17 @@ export {
   type ValidationResult,
 } from './schema.js';
 // Streaming utilities.
-export { type SSEMessage, type SSEOptions, sseResponse, streamJsonLines } from './streaming.js';
+export {
+  type SSEData,
+  type SSEEventMap,
+  type SSEEventMessage,
+  type SSEEventsOf,
+  type SSEMessage,
+  type SSEOptions,
+  type SSEResponse,
+  sseResponse,
+  streamJsonLines,
+} from './streaming.js';
 // Core type definitions.
 export {
   type CollectPathParams,

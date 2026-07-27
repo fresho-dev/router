@@ -1,6 +1,8 @@
 import assert from 'node:assert';
 import { describe, it } from 'node:test';
-import { sseResponse, streamJsonLines } from './streaming.js';
+import { router } from './core.js';
+import { createHttpClient } from './http-client.js';
+import { type SSEEventsOf, sseResponse, streamJsonLines } from './streaming.js';
 
 describe('streaming', () => {
   describe('sseResponse()', () => {
@@ -86,6 +88,64 @@ describe('streaming', () => {
 
       assert.strictEqual(response.headers.get('X-Custom-Header'), 'custom-value');
       assert.strictEqual(response.headers.get('Content-Type'), 'text/event-stream');
+    });
+
+    it('type-checks event names and their corresponding payloads', async () => {
+      interface Events {
+        message: { connected: boolean };
+        update: { count: number };
+        removed: { id: string };
+      }
+
+      const response = sseResponse<Events>((send, close) => {
+        send({ data: { connected: true } });
+        send({ event: 'update', data: { count: 1 } });
+        send({ event: 'removed', data: { id: 'item-1' } });
+
+        const rejectInvalidMessages = () => {
+          // @ts-expect-error Unknown event name.
+          send({ event: 'udpate', data: { count: 2 } });
+          // @ts-expect-error Payload does not match the event.
+          send({ event: 'update', data: { id: 'item-2' } });
+          // @ts-expect-error Named events require an event field.
+          send({ data: { count: 3 } });
+        };
+        void rejectInvalidMessages;
+
+        close();
+      });
+
+      const text = await response.text();
+      assert.ok(text.includes('data: {"connected":true}'));
+      assert.ok(text.includes('event: update\ndata: {"count":1}'));
+      assert.ok(text.includes('event: removed\ndata: {"id":"item-1"}'));
+    });
+
+    it('carries the event map through the typed HTTP client', () => {
+      interface Events {
+        update: { count: number };
+      }
+
+      const api = router({
+        events: router({
+          get: async () =>
+            sseResponse<Events>((send, close) => {
+              send({ event: 'update', data: { count: 1 } });
+              close();
+            }),
+        }),
+      });
+      const client = createHttpClient<typeof api>({});
+
+      type ClientEvents = SSEEventsOf<ReturnType<typeof client.events>>;
+      type IsExact = Events extends ClientEvents
+        ? ClientEvents extends Events
+          ? true
+          : false
+        : false;
+      const _isExact: IsExact = true;
+
+      assert.ok(true);
     });
   });
 

@@ -13,10 +13,14 @@
  * ```typescript
  * import { router, sseResponse, streamJsonLines } from '@fresho/router';
  *
+ * interface Events {
+ *   tick: { count: number };
+ * }
+ *
  * const api = router({
  *   // SSE for real-time updates
  *   events: router({
- *     get: async () => sseResponse(async (send, close) => {
+ *     get: async () => sseResponse<Events>(async (send, close) => {
  *       for (let i = 0; i < 10; i++) {
  *         send({ event: 'tick', data: { count: i } });
  *         await sleep(1000);
@@ -49,18 +53,83 @@ export interface SSEOptions {
 }
 
 /**
- * Server-Sent Event message structure.
+ * Data supported by an SSE message.
  */
-export interface SSEMessage {
-  /** Event type (optional). */
-  event?: string;
-  /** Event data. */
-  data: string | object;
+export type SSEData = string | object;
+
+/**
+ * Untyped map of SSE event names to their payloads.
+ *
+ * Define a narrower map and pass it to {@link sseResponse} to type-check event
+ * names and their corresponding data.
+ */
+export type SSEEventMap = Record<string, SSEData>;
+
+type ValidSSEEventMap<Events> = {
+  [Name in keyof Events]: SSEData;
+};
+
+interface SSEMessageMetadata {
   /** Event ID (optional). */
   id?: string;
   /** Retry interval hint for client (optional). */
   retry?: number;
 }
+
+/**
+ * Server-Sent Event message structure without a typed event map.
+ */
+export interface SSEMessage extends SSEMessageMetadata {
+  /** Event type (optional). */
+  event?: string;
+  /** Event data. */
+  data: SSEData;
+}
+
+type NamedSSEMessage<Events> = {
+  [Name in Exclude<keyof Events & string, 'message'>]: {
+    event: Name;
+    data: Events[Name];
+  };
+}[Exclude<keyof Events & string, 'message'>];
+
+type DefaultSSEMessage<Events> = 'message' extends keyof Events
+  ? {
+      /** Omit the event name to dispatch the default `message` event. */
+      event?: 'message';
+      data: Events['message'];
+    }
+  : never;
+
+/**
+ * Server-Sent Event message structure.
+ *
+ * For a typed event map, each event name is coupled to its payload type. Use
+ * the reserved `message` key to type messages that omit the `event` field.
+ */
+export type SSEEventMessage<Events extends ValidSSEEventMap<Events>> = (string extends keyof Events
+  ? SSEMessage
+  : NamedSSEMessage<Events> | DefaultSSEMessage<Events>) &
+  SSEMessageMetadata;
+
+declare const SSE_EVENTS: unique symbol;
+
+/**
+ * Response carrying its SSE event map at the type level.
+ */
+export type SSEResponse<Events extends ValidSSEEventMap<Events> = SSEEventMap> = Response & {
+  readonly [SSE_EVENTS]: Events;
+};
+
+/**
+ * Extracts the event map carried by an SSE response or typed client method.
+ *
+ * @example
+ * ```typescript
+ * type Events = SSEEventsOf<ReturnType<typeof client.events>>;
+ * ```
+ */
+export type SSEEventsOf<T> = Awaited<T> extends SSEResponse<infer Events> ? Events : never;
 
 /**
  * Formats an SSE message for transmission.
@@ -96,10 +165,14 @@ function formatSSEMessage(message: SSEMessage): string {
  *
  * @example
  * ```typescript
+ * interface CounterEvents {
+ *   tick: { count: number };
+ * }
+ *
  * const handler = async (c) => {
- *   return sseResponse(async (send, close) => {
+ *   return sseResponse<CounterEvents>(async (send, close) => {
  *     for (let i = 0; i < 5; i++) {
- *       await send({ data: { count: i } });
+ *       send({ event: 'tick', data: { count: i } });
  *       await new Promise(r => setTimeout(r, 1000));
  *     }
  *     close();
@@ -107,17 +180,20 @@ function formatSSEMessage(message: SSEMessage): string {
  * };
  * ```
  */
-export function sseResponse(
-  handler: (send: (message: SSEMessage) => void, close: () => void) => void | Promise<void>,
+export function sseResponse<Events extends ValidSSEEventMap<Events> = SSEEventMap>(
+  handler: (
+    send: (message: SSEEventMessage<Events>) => void,
+    close: () => void,
+  ) => void | Promise<void>,
   options: SSEOptions = {},
-): Response {
+): SSEResponse<Events> {
   const encoder = new TextEncoder();
   let isClosed = false;
 
   const stream = new ReadableStream({
     async start(controller) {
       // Send function for the handler.
-      const send = (message: SSEMessage) => {
+      const send = (message: SSEEventMessage<Events>) => {
         if (!isClosed) {
           controller.enqueue(encoder.encode(formatSSEMessage(message)));
         }
@@ -162,7 +238,7 @@ export function sseResponse(
   headers.set('Cache-Control', 'no-cache');
   headers.set('Connection', 'keep-alive');
 
-  return new Response(stream, { headers });
+  return new Response(stream, { headers }) as SSEResponse<Events>;
 }
 
 /**
