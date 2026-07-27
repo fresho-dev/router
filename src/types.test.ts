@@ -428,6 +428,61 @@ describe('types', () => {
     });
   });
 
+  describe('Bare handlers with context parameters', () => {
+    interface Item {
+      id: string;
+      count: number;
+    }
+
+    const api = router({
+      asynchronous: router({
+        get: async (c: { request: Request }): Promise<Item> => ({
+          id: c.request.url,
+          count: 1,
+        }),
+      }),
+      synchronous: router({
+        get: (c: { request: Request }): Item => ({
+          id: c.request.url,
+          count: 1,
+        }),
+      }),
+    });
+    const client = createHttpClient<typeof api>({});
+
+    it('preserves implicit and explicit method response types', () => {
+      type AsyncImplicit = Awaited<ReturnType<typeof client.asynchronous>>;
+      type AsyncExplicit = Awaited<ReturnType<typeof client.asynchronous.$get>>;
+      type SyncImplicit = Awaited<ReturnType<typeof client.synchronous>>;
+      type SyncExplicit = Awaited<ReturnType<typeof client.synchronous.$get>>;
+
+      type IsExact<A, B> = A extends B ? (B extends A ? true : false) : false;
+      const _asyncImplicitIsItem: IsExact<AsyncImplicit, Item> = true;
+      const _asyncExplicitIsItem: IsExact<AsyncExplicit, Item> = true;
+      const _syncImplicitIsItem: IsExact<SyncImplicit, Item> = true;
+      const _syncExplicitIsItem: IsExact<SyncExplicit, Item> = true;
+
+      void _asyncImplicitIsItem;
+      void _asyncExplicitIsItem;
+      void _syncImplicitIsItem;
+      void _syncExplicitIsItem;
+      assert.ok(true);
+    });
+
+    it('keeps explicit methods callable', () => {
+      const _callMethods = async () => {
+        const asyncImplicit: Item = await client.asynchronous();
+        const asyncExplicit: Item = await client.asynchronous.$get();
+        const syncImplicit: Item = await client.synchronous();
+        const syncExplicit: Item = await client.synchronous.$get();
+        return { asyncImplicit, asyncExplicit, syncImplicit, syncExplicit };
+      };
+
+      void _callMethods;
+      assert.ok(true);
+    });
+  });
+
   describe('RouterBrand', () => {
     it('Router extends RouterBrand for cross-module type inference', () => {
       // Create a sub-router (simulates import from another module).

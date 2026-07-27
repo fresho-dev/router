@@ -22,7 +22,7 @@ export type PrefixedMethod<T extends LowercaseMethods> = T extends 'get'
           : never;
 
 /** Extract return type from a handler. */
-export type ExtractReturn<T> = T extends (...args: unknown[]) => infer R
+export type ExtractReturn<T> = T extends (...args: never[]) => infer R
   ? R extends Promise<infer U>
     ? U
     : R
@@ -59,7 +59,7 @@ export type HasParams<Path extends string[]> = Path extends [
 export type ExtractMethod<T> =
   T extends RouteDefinition<infer _Q, infer _B, infer _R, infer _P, infer _Ctx>
     ? T
-    : T extends (...args: unknown[]) => unknown
+    : T extends (...args: never[]) => unknown
       ? T
       : never;
 
@@ -105,7 +105,7 @@ export type MethodClient<T, Extra, Path extends string[] = []> = T extends Route
   infer _Ctx
 >
   ? (options?: BuildOptions<Path, SafeInferSchema<Q>, SafeInferSchema<B>, Extra>) => Promise<R>
-  : T extends (...args: unknown[]) => unknown
+  : T extends (...args: never[]) => unknown
     ? (options?: BuildOptions<Path, {}, {}, Extra>) => Promise<ExtractReturn<T>>
     : never;
 
@@ -129,7 +129,7 @@ export type ImplicitGetCall<
           } & Extra,
         ) => Promise<R>
       : (options?: RequestOptions<Extra>) => Promise<R>
-    : ExtractMethod<T['get']> extends (...args: unknown[]) => unknown
+    : ExtractMethod<T['get']> extends (...args: never[]) => unknown
       ? HasParams<Path> extends true
         ? (
             options: { path: CollectPathParams<Path> } & {
