@@ -35,7 +35,7 @@ describe('Common Middleware', () => {
 
   const next = async () => {
     nextCalled = true;
-    return nextResponse;
+    return nextResponse.clone();
   };
 
   describe('Error Handler', () => {
@@ -560,8 +560,10 @@ describe('Common Middleware', () => {
       const methods = ['GET', 'HEAD', 'OPTIONS'];
       for (const method of methods) {
         context.request = new Request('http://example.com/test', { method });
+        nextCalled = false;
         const response = await middleware(context, next);
-        assert.strictEqual(response, nextResponse, `Should skip validation for ${method}`);
+        assert.strictEqual(response.status, 200, `Should skip validation for ${method}`);
+        assert.strictEqual(nextCalled, true, `Should call next for ${method}`);
       }
     });
 
