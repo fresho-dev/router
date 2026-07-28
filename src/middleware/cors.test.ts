@@ -26,7 +26,7 @@ describe('CORS Middleware', () => {
 
   const next = async () => {
     nextCalled = true;
-    return nextResponse;
+    return nextResponse.clone();
   };
 
   describe('Preflight requests (OPTIONS)', () => {

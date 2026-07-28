@@ -56,6 +56,16 @@ export default { fetch: api.handler() };
 npm install @fresho/router
 ```
 
+```bash
+bun add @fresho/router
+```
+
+## Runtime Support
+
+The full test suite runs in Node.js 22/24 and Bun 1.3.14. CI also deploys the built
+package to a local Cloudflare `workerd` runtime and verifies routing, validation,
+middleware, and streaming behavior.
+
 ## Path Convention
 
 Property names become URL path segments:

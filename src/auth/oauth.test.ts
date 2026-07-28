@@ -1,5 +1,6 @@
 import assert from 'node:assert';
-import { describe, it, mock } from 'node:test';
+import { describe, it } from 'node:test';
+import { createFetchSpy } from '../test-support.js';
 import {
   buildAuthorizationUrl,
   decodeOAuthState,
@@ -146,7 +147,7 @@ describe('buildAuthorizationUrl', () => {
 describe('exchangeCode', () => {
   it('should exchange code for tokens with body auth', async () => {
     const originalFetch = global.fetch;
-    const mockFetch = mock.fn(async () => {
+    const mockFetch = createFetchSpy(async () => {
       return new Response(
         JSON.stringify({
           access_token: 'test-access-token',
@@ -157,7 +158,7 @@ describe('exchangeCode', () => {
         { status: 200 },
       );
     });
-    global.fetch = mockFetch;
+    global.fetch = mockFetch.fetch;
 
     try {
       const tokens = await exchangeCode('test-code', {
@@ -190,7 +191,7 @@ describe('exchangeCode', () => {
 
   it('should exchange code with basic auth', async () => {
     const originalFetch = global.fetch;
-    const mockFetch = mock.fn(async () => {
+    const mockFetch = createFetchSpy(async () => {
       return new Response(
         JSON.stringify({
           access_token: 'test-access-token',
@@ -200,7 +201,7 @@ describe('exchangeCode', () => {
         { status: 200 },
       );
     });
-    global.fetch = mockFetch;
+    global.fetch = mockFetch.fetch;
 
     try {
       await exchangeCode('test-code', {
@@ -227,9 +228,9 @@ describe('exchangeCode', () => {
 
   it('should throw on error response', async () => {
     const originalFetch = global.fetch;
-    global.fetch = mock.fn(async () => {
+    global.fetch = createFetchSpy(async () => {
       return new Response('{"error": "invalid_grant"}', { status: 400 });
-    });
+    }).fetch;
 
     try {
       await assert.rejects(
@@ -251,7 +252,7 @@ describe('exchangeCode', () => {
 describe('refreshAccessToken', () => {
   it('should refresh access token', async () => {
     const originalFetch = global.fetch;
-    const mockFetch = mock.fn(async () => {
+    const mockFetch = createFetchSpy(async () => {
       return new Response(
         JSON.stringify({
           access_token: 'new-access-token',
@@ -261,7 +262,7 @@ describe('refreshAccessToken', () => {
         { status: 200 },
       );
     });
-    global.fetch = mockFetch;
+    global.fetch = mockFetch.fetch;
 
     try {
       const tokens = await refreshAccessToken('test-refresh-token', {
@@ -285,7 +286,7 @@ describe('refreshAccessToken', () => {
 describe('revokeToken', () => {
   it('should revoke token successfully', async () => {
     const originalFetch = global.fetch;
-    global.fetch = mock.fn(async () => new Response(null, { status: 200 }));
+    global.fetch = createFetchSpy(async () => new Response(null, { status: 200 })).fetch;
 
     try {
       const result = await revokeToken({
@@ -300,7 +301,7 @@ describe('revokeToken', () => {
 
   it('should handle 204 response', async () => {
     const originalFetch = global.fetch;
-    global.fetch = mock.fn(async () => new Response(null, { status: 204 }));
+    global.fetch = createFetchSpy(async () => new Response(null, { status: 204 })).fetch;
 
     try {
       const result = await revokeToken({
@@ -315,8 +316,8 @@ describe('revokeToken', () => {
 
   it('should include token_type_hint when provided', async () => {
     const originalFetch = global.fetch;
-    const mockFetch = mock.fn(async () => new Response(null, { status: 200 }));
-    global.fetch = mockFetch;
+    const mockFetch = createFetchSpy(async () => new Response(null, { status: 200 }));
+    global.fetch = mockFetch.fetch;
 
     try {
       await revokeToken({

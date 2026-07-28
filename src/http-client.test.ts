@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import { router } from './core.js';
 import { createHttpClient } from './http-client.js';
 import { sseResponse, streamJsonLines } from './streaming.js';
+import { createFetchSpy } from './test-support.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -54,15 +55,14 @@ describe('http-client', () => {
     });
 
     describe('fetch behavior', () => {
-      it('builds path from property chain', async (t) => {
-        const fetchMock = t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({})),
-        );
+      it('builds path from property chain', async () => {
+        const fetchMock = createFetchSpy();
 
         // Use any for proxy-based tests without a specific router type.
-        const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
+        const client: AnyClient = createHttpClient({
+          baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
+        });
 
         await client.outer.inner.test();
 
@@ -71,12 +71,8 @@ describe('http-client', () => {
         assert.strictEqual(url, 'http://test.com/outer/inner/test');
       });
 
-      it('substitutes $param path params in URL', async (t) => {
-        const fetchMock = t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({})),
-        );
+      it('substitutes $param path params in URL', async () => {
+        const fetchMock = createFetchSpy();
 
         const api = router({
           users: router({
@@ -84,7 +80,10 @@ describe('http-client', () => {
           }),
         });
 
-        const client = createHttpClient<typeof api>({ baseUrl: 'http://test.com' });
+        const client = createHttpClient<typeof api>({
+          baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
+        });
 
         await client.users.$id({ path: { id: '123' } });
 
@@ -92,14 +91,13 @@ describe('http-client', () => {
         assert.strictEqual(url, 'http://test.com/users/123');
       });
 
-      it('adds query params to URL', async (t) => {
-        const fetchMock = t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({})),
-        );
+      it('adds query params to URL', async () => {
+        const fetchMock = createFetchSpy();
 
-        const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
+        const client: AnyClient = createHttpClient({
+          baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
+        });
 
         await client.test({ query: { a: 'hello', b: 42 } });
 
@@ -108,14 +106,13 @@ describe('http-client', () => {
         assert.ok(url.includes('b=42'));
       });
 
-      it('omits undefined query params', async (t) => {
-        const fetchMock = t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({})),
-        );
+      it('omits undefined query params', async () => {
+        const fetchMock = createFetchSpy();
 
-        const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
+        const client: AnyClient = createHttpClient({
+          baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
+        });
 
         await client.test({ query: { a: 'hello', b: undefined } });
 
@@ -124,14 +121,10 @@ describe('http-client', () => {
         assert.ok(!url.includes('b='));
       });
 
-      it('works without baseUrl (relative paths)', async (t) => {
-        const fetchMock = t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({})),
-        );
+      it('works without baseUrl (relative paths)', async () => {
+        const fetchMock = createFetchSpy();
 
-        const client: AnyClient = createHttpClient({});
+        const client: AnyClient = createHttpClient({ fetch: fetchMock.fetch });
 
         await client.api.test();
 
@@ -139,15 +132,12 @@ describe('http-client', () => {
         assert.strictEqual(url, '/api/test');
       });
 
-      it('sends configured headers', async (t) => {
-        const fetchMock = t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({})),
-        );
+      it('sends configured headers', async () => {
+        const fetchMock = createFetchSpy();
 
         const client: AnyClient = createHttpClient({
           baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
           headers: { Authorization: 'Bearer token123' },
         });
 
@@ -158,14 +148,13 @@ describe('http-client', () => {
         assert.strictEqual(headers.get('Authorization'), 'Bearer token123');
       });
 
-      it('sends per-request headers', async (t) => {
-        const fetchMock = t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({})),
-        );
+      it('sends per-request headers', async () => {
+        const fetchMock = createFetchSpy();
 
-        const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
+        const client: AnyClient = createHttpClient({
+          baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
+        });
 
         await client.test({ headers: { 'X-Custom': 'value' } });
 
@@ -174,15 +163,12 @@ describe('http-client', () => {
         assert.strictEqual(headers.get('X-Custom'), 'value');
       });
 
-      it('per-request headers override configured headers', async (t) => {
-        const fetchMock = t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({})),
-        );
+      it('per-request headers override configured headers', async () => {
+        const fetchMock = createFetchSpy();
 
         const client: AnyClient = createHttpClient({
           baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
           headers: { 'X-Header': 'config-value' },
         });
 
@@ -193,16 +179,13 @@ describe('http-client', () => {
         assert.strictEqual(headers.get('X-Header'), 'request-value');
       });
 
-      it('supports dynamic header functions', async (t) => {
-        const fetchMock = t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({})),
-        );
+      it('supports dynamic header functions', async () => {
+        const fetchMock = createFetchSpy();
 
         let tokenValue = 'token-1';
         const client: AnyClient = createHttpClient({
           baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
           headers: {
             Authorization: () => `Bearer ${tokenValue}`,
             'X-Static': 'static-value',
@@ -222,16 +205,13 @@ describe('http-client', () => {
         assert.strictEqual(headers.get('Authorization'), 'Bearer token-2');
       });
 
-      it('skips dynamic headers that return null or undefined', async (t) => {
-        const fetchMock = t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({})),
-        );
+      it('skips dynamic headers that return null or undefined', async () => {
+        const fetchMock = createFetchSpy();
 
         let token: string | null = null;
         const client: AnyClient = createHttpClient({
           baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
           headers: {
             Authorization: () => (token ? `Bearer ${token}` : null),
           },
@@ -249,12 +229,8 @@ describe('http-client', () => {
         assert.strictEqual(headers.get('Authorization'), 'Bearer my-token');
       });
 
-      it('supports async header functions', async (t) => {
-        const fetchMock = t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({})),
-        );
+      it('supports async header functions', async () => {
+        const fetchMock = createFetchSpy();
 
         const getToken = async () => {
           await new Promise((resolve) => setTimeout(resolve, 10));
@@ -263,6 +239,7 @@ describe('http-client', () => {
 
         const client: AnyClient = createHttpClient({
           baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
           headers: {
             Authorization: async () => `Bearer ${await getToken()}`,
           },
@@ -274,15 +251,12 @@ describe('http-client', () => {
         assert.strictEqual(headers.get('Authorization'), 'Bearer async-token');
       });
 
-      it('sends credentials mode when configured', async (t) => {
-        const fetchMock = t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({})),
-        );
+      it('sends credentials mode when configured', async () => {
+        const fetchMock = createFetchSpy();
 
         const client: AnyClient = createHttpClient({
           baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
           credentials: 'include',
         });
 
@@ -292,14 +266,13 @@ describe('http-client', () => {
         assert.strictEqual(init.credentials, 'include');
       });
 
-      it('sets Content-Type for POST with body', async (t) => {
-        const fetchMock = t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({})),
-        );
+      it('sets Content-Type for POST with body', async () => {
+        const fetchMock = createFetchSpy();
 
-        const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
+        const client: AnyClient = createHttpClient({
+          baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
+        });
 
         await client.test.$post({ body: { name: 'alice' } });
 
@@ -308,14 +281,13 @@ describe('http-client', () => {
         assert.strictEqual(headers.get('Content-Type'), 'application/json');
       });
 
-      it('sends JSON body for POST', async (t) => {
-        const fetchMock = t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({})),
-        );
+      it('sends JSON body for POST', async () => {
+        const fetchMock = createFetchSpy();
 
-        const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
+        const client: AnyClient = createHttpClient({
+          baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
+        });
 
         await client.test.$post({ body: { name: 'alice' } });
 
@@ -323,14 +295,13 @@ describe('http-client', () => {
         assert.strictEqual(init.body, JSON.stringify({ name: 'alice' }));
       });
 
-      it('parses JSON response', async (t) => {
-        t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({ result: 'success' })),
-        );
+      it('parses JSON response', async () => {
+        const fetchMock = createFetchSpy(() => Response.json({ result: 'success' }));
 
-        const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
+        const client: AnyClient = createHttpClient({
+          baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
+        });
 
         const result = await client.test();
         assert.deepStrictEqual(result, { result: 'success' });
@@ -394,22 +365,24 @@ describe('http-client', () => {
         assert.strictEqual(await response.text(), '{"id":1}\n{"id":2}\n');
       });
 
-      it('throws on non-ok response', async (t) => {
-        t.mock.method(globalThis, 'fetch', async () => new Response('Not Found', { status: 404 }));
+      it('throws on non-ok response', async () => {
+        const fetchMock = createFetchSpy(() => new Response('Not Found', { status: 404 }));
 
-        const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
+        const client: AnyClient = createHttpClient({
+          baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
+        });
 
         await assert.rejects(async () => client.test(), /Not Found/);
       });
 
-      it('uses correct HTTP method via .$get(), .$post(), etc.', async (t) => {
-        const fetchMock = t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({})),
-        );
+      it('uses correct HTTP method via .$get(), .$post(), etc.', async () => {
+        const fetchMock = createFetchSpy();
 
-        const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
+        const client: AnyClient = createHttpClient({
+          baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
+        });
 
         await client.test.$get();
         assert.strictEqual((fetchMock.mock.calls[0].arguments[1] as RequestInit).method, 'GET');
@@ -427,12 +400,8 @@ describe('http-client', () => {
         assert.strictEqual((fetchMock.mock.calls[4].arguments[1] as RequestInit).method, 'DELETE');
       });
 
-      it('lowercase method names navigate to path segments', async (t) => {
-        const fetchMock = t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({})),
-        );
+      it('lowercase method names navigate to path segments', async () => {
+        const fetchMock = createFetchSpy();
 
         // Route structure: GET /resources/get, GET /resources/delete
         const api = router({
@@ -442,7 +411,10 @@ describe('http-client', () => {
           }),
         });
 
-        const client = createHttpClient<typeof api>({ baseUrl: 'http://test.com' });
+        const client = createHttpClient<typeof api>({
+          baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
+        });
 
         // Navigate to /resources/get and execute GET.
         await client.resources.get.$get();
@@ -458,26 +430,21 @@ describe('http-client', () => {
         assert.strictEqual((fetchMock.mock.calls[1].arguments[1] as RequestInit).method, 'GET');
       });
 
-      it('direct call uses GET method', async (t) => {
-        const fetchMock = t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({})),
-        );
+      it('direct call uses GET method', async () => {
+        const fetchMock = createFetchSpy();
 
-        const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
+        const client: AnyClient = createHttpClient({
+          baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
+        });
 
         await client.test();
 
         assert.strictEqual((fetchMock.mock.calls[0].arguments[1] as RequestInit).method, 'GET');
       });
 
-      it('appends multiple path params in order', async (t) => {
-        const fetchMock = t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({})),
-        );
+      it('appends multiple path params in order', async () => {
+        const fetchMock = createFetchSpy();
 
         const api = router({
           users: router({
@@ -491,7 +458,10 @@ describe('http-client', () => {
           }),
         });
 
-        const client = createHttpClient<typeof api>({ baseUrl: 'http://test.com' });
+        const client = createHttpClient<typeof api>({
+          baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
+        });
 
         await client.users.$userId.posts.$postId({ path: { userId: 'u1', postId: 'p2' } });
 
@@ -499,12 +469,8 @@ describe('http-client', () => {
         assert.strictEqual(url, 'http://test.com/users/u1/posts/p2');
       });
 
-      it('encodes path params', async (t) => {
-        const fetchMock = t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({})),
-        );
+      it('encodes path params', async () => {
+        const fetchMock = createFetchSpy();
 
         const api = router({
           users: router({
@@ -512,7 +478,10 @@ describe('http-client', () => {
           }),
         });
 
-        const client = createHttpClient<typeof api>({ baseUrl: 'http://test.com' });
+        const client = createHttpClient<typeof api>({
+          baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
+        });
 
         await client.users.$id({ path: { id: 'hello world' } });
 
@@ -582,14 +551,13 @@ describe('http-client', () => {
         assert.strictEqual(url, 'http://test.com/users/hello%20world');
       });
 
-      it('does not fire a request', (t) => {
-        const fetchMock = t.mock.method(
-          globalThis,
-          'fetch',
-          async () => new Response(JSON.stringify({})),
-        );
+      it('does not fire a request', () => {
+        const fetchMock = createFetchSpy();
 
-        const client: AnyClient = createHttpClient({ baseUrl: 'http://test.com' });
+        const client: AnyClient = createHttpClient({
+          baseUrl: 'http://test.com',
+          fetch: fetchMock.fetch,
+        });
 
         client.media.playlist.$url();
 
