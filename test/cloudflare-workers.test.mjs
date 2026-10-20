@@ -68,11 +68,12 @@ describe('Cloudflare Workers runtime', () => {
     const call = await (
       await rpc(2, 'tools/call', {
         name: 'get_echo',
-        arguments: { query: { count: 2, message: 'hi' } },
+        arguments: { count: 2, message: 'hi' },
       })
     ).json();
     assert.deepStrictEqual(call.result, {
       content: [{ type: 'text', text: '{"count":2,"message":"hi"}' }],
+      structuredContent: { count: 2, message: 'hi' },
       isError: false,
     });
   });

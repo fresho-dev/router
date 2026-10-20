@@ -396,13 +396,17 @@ import { mcp } from "@fresho/router/mcp";
 const api = router({
 	users,
 	billing,
-	mcp: mcp({ users }, { name: "my-api", version: "1.0.0" }),
+	mcp: mcp({ users }, { name: "my-api", version: "1.0.0" }, bearerAuth({ verify })),
 });
 ```
 
-- **Tools** — one per route: `get_users`, `post_users`, `get_users_by_id`, ... Descriptions come from `route.description`; inputs are `{ path, query, body }` as JSON Schema derived from the route's schemas.
-- **Calls** — each tool call is dispatched as an HTTP request through the given routers with the caller's headers forwarded. Middleware on the MCP endpoint (passed to `mcp()` or on its parent routers) runs once per MCP request, and what it adds to the context (e.g. `c.user`) reaches handlers; middleware on the given routers and below runs on every call. Middleware on the given routers' *own* parents elsewhere in your app does **not** run, so guard the endpoint or the routers themselves. Responses become text content; a non-2xx status sets `isError`, and streaming (SSE, NDJSON) responses are rejected.
-- **Safety** — cross-origin requests get 403, path parameters can't be `.` or `..`, and handler exceptions become a generic `Internal error`.
+`mcp()` requires endpoint middleware (usually auth). Pass `public: true` instead when the endpoint is open, or already guarded by middleware on its parent routers.
+
+- **Tools** — one per route, named from the method and path (`get_users`, `post_users`, `get_users_by_id`, ...) unless the route sets `operationId` (also used in OpenAPI). Descriptions come from `route.description`.
+- **Arguments** — flat: path params, query fields and body fields side by side (`{ id, text }`), as JSON Schema derived from the route's schemas. Names must be unique across the three; a clash throws when `mcp()` is called. `descriptions: { field: '...', 'address.city': '...' }` on a route documents fields for agents and OpenAPI. Array query params are left out, since the router can't parse them from query strings. Without a body schema, `post`/`put`/`patch` tools send any other arguments as the body.
+- **Annotations** — `get` tools are marked `readOnlyHint`, `delete` tools `destructiveHint` and `idempotentHint`, and `put` tools `idempotentHint`, so clients can decide when to ask for confirmation. Override per route with `mcp: { annotations: { ... } }`.
+- **Calls** — each tool call is dispatched as an HTTP request through the given routers with the caller's headers forwarded. Middleware on the MCP endpoint (passed to `mcp()` or on its parent routers) runs once per MCP request, and what it adds to the context (e.g. `c.user`) reaches handlers; middleware on the given routers and below runs on every call. Middleware on the given routers' *own* parents elsewhere in your app does **not** run, so guard the endpoint or the routers themselves. Responses become text content, plus `structuredContent` when the body is a JSON object; a non-2xx status sets `isError`, and streaming (SSE, NDJSON) responses are rejected.
+- **Safety** — requests with an `Origin` other than the endpoint's get 403 (as the MCP spec requires against DNS rebinding), so browser-hosted clients on other origins can't connect. Path parameters can't be `.` or `..`, and handler exceptions become a generic `Internal error`.
 - **Transport** — stateless Streamable HTTP with JSON responses; `GET` and `DELETE` return 405.
 - Pass a router to expose all of its routes, or a record of routers to mount them under their keys.
 

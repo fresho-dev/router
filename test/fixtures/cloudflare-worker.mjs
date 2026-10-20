@@ -32,7 +32,7 @@ const api = router(
           close();
         }),
     }),
-    mcp: mcp({ echo }, { name: 'workerd', version: '1.0.0' }),
+    mcp: mcp({ echo }, { name: 'workerd', version: '1.0.0', public: true }),
   },
   cors(),
   requestId(),

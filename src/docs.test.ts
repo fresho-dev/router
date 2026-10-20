@@ -183,6 +183,37 @@ describe('docs', () => {
       );
     });
 
+    it('includes operationId and field descriptions', () => {
+      const spec = generateDocs({
+        title: 'Test',
+        version: '1.0.0',
+        router: router({
+          test: router({
+            post: route({
+              operationId: 'create_test',
+              query: { dry: 'boolean?' },
+              body: { address: { city: 'string' } },
+              descriptions: { dry: 'Validate only', address: 'Home', 'address.city': 'City' },
+              handler: async () => ({}),
+            }),
+          }),
+        }),
+      }) as any;
+
+      const operation = spec.paths['/test'].post;
+      assert.strictEqual(operation.operationId, 'create_test');
+      assert.strictEqual(operation.parameters[0].description, 'Validate only');
+      assert.deepStrictEqual(
+        operation.requestBody.content['application/json'].schema.properties.address,
+        {
+          type: 'object',
+          description: 'Home',
+          properties: { city: { type: 'string', description: 'City' } },
+          required: ['city'],
+        },
+      );
+    });
+
     it('does not include body for GET', () => {
       const spec = generateDocs({
         title: 'Test',

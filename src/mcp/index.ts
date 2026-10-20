@@ -11,13 +11,14 @@
  * ```typescript
  * import { router } from '@fresho/router';
  * import { mcp } from '@fresho/router/mcp';
+ * import { bearerAuth } from '@fresho/router/middleware';
  *
  * const api = router({ users, billing });
  *
  * export default {
  *   fetch: router({
  *     ...api.routes,
- *     mcp: mcp({ users }, { name: 'my-api', version: '1.0.0' }),
+ *     mcp: mcp({ users }, { name: 'my-api', version: '1.0.0' }, bearerAuth({ verify })),
  *   }).handler(),
  * };
  * ```
@@ -37,7 +38,7 @@ import { router } from '../core.js';
 import { collectRoutes } from '../docs.js';
 import { type Middleware, type MiddlewareContext, runMiddleware } from '../middleware.js';
 import { type SchemaDefinition, toJsonSchema } from '../schema.js';
-import type { Context, Router, RouterRoutes } from '../types.js';
+import type { Context, Router, RouterRoutes, ToolAnnotations } from '../types.js';
 import { isRouter } from '../types.js';
 
 /** OAuth 2.0 protected resource settings (RFC 9728). */
@@ -58,13 +59,21 @@ export interface McpOptions {
   instructions?: string;
   /** Advertise OAuth: 401s gain a `resource_metadata` challenge and metadata is served. */
   oauth?: McpOAuthOptions;
+  /** Allow an endpoint without middleware: it is open, or already guarded by parent routers. */
+  public?: boolean;
 }
+
+/** Where a flat tool argument goes in the HTTP request. */
+type ArgumentSource = 'path' | 'query' | 'body';
 
 /** A tool and the route it calls. */
 interface ToolRoute {
   tool: Tool;
   method: string;
   path: string;
+  sources: Map<string, ArgumentSource>;
+  /** Without a body schema, arguments that aren't path or query fields form the body. */
+  hasBodySchema: boolean;
 }
 
 const METHODS_WITH_BODY = ['post', 'put', 'patch'];
@@ -85,14 +94,22 @@ const DROPPED_HEADERS = [
   'Upgrade',
 ];
 const STREAMING_TYPES = /^(text\/event-stream|application\/x-ndjson)/i;
+const TOOL_NAME = /^[A-Za-z0-9_-]{1,128}$/;
+const DEFAULT_ANNOTATIONS: Record<string, ToolAnnotations> = {
+  get: { readOnlyHint: true },
+  put: { idempotentHint: true },
+  delete: { destructiveHint: true, idempotentHint: true },
+};
 const TOOL_METHODS = new Set(['get', 'delete', ...METHODS_WITH_BODY]);
 const METADATA_PATH = '/.well-known/oauth-protected-resource';
 
-/** Returns `value` if it is a plain object, else an empty one; tool arguments are not validated. */
-function record(value: unknown): Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+/** Parses JSON, returning undefined for invalid input. */
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
 }
 
 /** Builds a tool name such as `get_users_by_id` from a method and `{param}` path. */
@@ -101,48 +118,54 @@ function toolName(method: string, path: string): string {
     .split('/')
     .filter(Boolean)
     .map((s) => (s.startsWith('{') ? `by_${s.slice(1, -1)}` : s));
-  const name = [method, ...segments].join('_').replace(/[^A-Za-z0-9_-]/g, '_');
-  // MCP allows up to 128 characters; some clients allow fewer.
-  if (name.length > 128) throw new Error(`Tool name too long: ${name}`);
-  return name;
+  return [method, ...segments].join('_').replace(/[^A-Za-z0-9_-]/g, '_');
 }
 
-/** Derives one tool per route in the tree. */
+/** Derives one tool per route in the tree, with path, query and body fields as flat arguments. */
 function collectTools(root: Router<RouterRoutes>): Map<string, ToolRoute> {
   const tools = new Map<string, ToolRoute>();
   for (const { path, method, route } of collectRoutes(root)) {
     if (!TOOL_METHODS.has(method)) continue;
-    const name = toolName(method, path);
+    const name = route?.operationId ?? toolName(method, path);
+    // MCP allows up to 128 characters; some clients reject other characters.
+    if (!TOOL_NAME.test(name)) throw new Error(`Invalid tool name: ${name}`);
     if (tools.has(name)) throw new Error(`Duplicate tool name: ${name}`);
 
     const properties: Record<string, object> = {};
     const required: string[] = [];
-    const add = (key: string, schema: ReturnType<typeof toJsonSchema>) => {
-      if (Object.keys(schema.properties).length === 0) return;
-      properties[key] = schema;
-      if (schema.required) required.push(key);
+    const sources = new Map<string, ArgumentSource>();
+    const add = (source: ArgumentSource, schema: SchemaDefinition) => {
+      const json = toJsonSchema(schema, route?.descriptions);
+      for (const [key, property] of Object.entries(json.properties)) {
+        if (sources.has(key)) throw new Error(`Duplicate argument ${key} in tool ${name}`);
+        sources.set(key, source);
+        properties[key] = property as object;
+      }
+      required.push(...(json.required ?? []));
     };
     const params = [...path.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
-    add('path', toJsonSchema(Object.fromEntries(params.map((p) => [p, 'string']))));
+    add('path', Object.fromEntries(params.map((p) => [p, 'string'])));
     if (route?.query) {
       // Query strings only carry scalars.
       const scalars = Object.entries(route.query as SchemaDefinition).filter(
         ([, type]) => typeof type === 'string' && !type.includes('[]'),
       );
-      add('query', toJsonSchema(Object.fromEntries(scalars)));
+      add('query', Object.fromEntries(scalars));
     }
-    if (route?.body && METHODS_WITH_BODY.includes(method)) {
-      add('body', toJsonSchema(route.body as SchemaDefinition));
-    }
+    const hasBodySchema = !!route?.body && METHODS_WITH_BODY.includes(method);
+    if (hasBodySchema) add('body', route?.body as SchemaDefinition);
 
     tools.set(name, {
       tool: {
         name,
         description: route?.description ?? `${method.toUpperCase()} ${path}`,
         inputSchema: { type: 'object', properties, ...(required.length > 0 && { required }) },
+        annotations: { ...DEFAULT_ANNOTATIONS[method], ...route?.mcp?.annotations },
       },
       method,
       path,
+      sources,
+      hasBodySchema,
     });
   }
   return tools;
@@ -162,7 +185,15 @@ async function callTool(
     content: [{ type: 'text', text }],
     isError: true,
   });
-  const pathArgs = record(args.path);
+  const pathArgs: Record<string, unknown> = {};
+  const queryArgs: Record<string, unknown> = {};
+  const bodyArgs: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    const source = target.sources.get(key) ?? (target.hasBodySchema ? undefined : 'body');
+    if (source === 'path') pathArgs[key] = value;
+    else if (source === 'query') queryArgs[key] = value;
+    else if (source === 'body') bodyArgs[key] = value;
+  }
   let missing: string | undefined;
   let invalid: string | undefined;
   const path = target.path.replace(/\{(\w+)\}/g, (_, name: string) => {
@@ -176,7 +207,7 @@ async function callTool(
   if (invalid) return fail(`Invalid path parameter: ${invalid}`);
 
   const url = new URL(path, c.request.url);
-  for (const [key, value] of Object.entries(record(args.query))) {
+  for (const [key, value] of Object.entries(queryArgs)) {
     if (typeof value === 'object' && value !== null) return fail(`Invalid query parameter: ${key}`);
     if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
   }
@@ -194,7 +225,7 @@ async function callTool(
       new Request(url, {
         method: target.method.toUpperCase(),
         headers,
-        body: hasBody ? JSON.stringify(args.body ?? {}) : undefined,
+        body: hasBody ? JSON.stringify(bodyArgs) : undefined,
       }),
       c,
     );
@@ -206,7 +237,15 @@ async function callTool(
     await response.body?.cancel();
     return fail('Streaming responses are not supported');
   }
-  return { content: [{ type: 'text', text: await response.text() }], isError: !response.ok };
+  const text = await response.text();
+  const result: CallToolResult = { content: [{ type: 'text', text }], isError: !response.ok };
+  if (/^application\/json/i.test(response.headers.get('Content-Type') ?? '')) {
+    const value = parseJson(text);
+    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+      result.structuredContent = value as Record<string, unknown>;
+    }
+  }
+  return result;
 }
 
 /** Handles one MCP request with a fresh stateless server. */
@@ -273,11 +312,12 @@ function metadata(oauth: McpOAuthOptions) {
 /**
  * Creates an MCP endpoint exposing routes as tools.
  *
- * Mount the result in a router (e.g. `mcp: mcp({ users }, options)`). Tool names come from the
- * method and path (`get_users`, `delete_users_by_id`), descriptions from `route.description`, and
- * inputs from the route's path params and query/body schemas as `{ path, query, body }`.
+ * Mount the result in a router (e.g. `mcp: mcp({ users }, options, auth)`). Tool names come from
+ * `route.operationId` or the method and path (`get_users`, `delete_users_by_id`), descriptions
+ * from `route.description`, and flat inputs from the route's path params and query/body schemas.
  *
- * Middleware passed after `options` guards the endpoint itself; put auth there so unauthenticated
+ * Middleware passed after `options` guards the endpoint itself, and is required unless
+ * `options.public` is set; put auth there so unauthenticated
  * clients get an HTTP 401 (with an OAuth challenge when `oauth` is set). Context it adds reaches
  * handlers. Middleware on the given routers runs on every tool call, with the caller's headers
  * forwarded; middleware on their parents elsewhere in the app does not.
@@ -295,6 +335,9 @@ export function mcp(
   options: McpOptions,
   ...middleware: Middleware[]
 ): Router<RouterRoutes> {
+  if (middleware.length === 0 && options.public !== true) {
+    throw new Error('mcp() needs endpoint middleware such as auth, or public: true');
+  }
   const base = isRouter(routes) ? routes : router(routes as RouterRoutes);
   const tools = collectTools(base);
 

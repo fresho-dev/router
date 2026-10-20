@@ -68,6 +68,7 @@ export function generateDocs(config: {
     }
 
     const operation: Record<string, unknown> = {
+      operationId: route?.operationId,
       description: route?.description,
       responses: {
         200: { description: 'Successful response' },
@@ -84,6 +85,7 @@ export function generateDocs(config: {
           name,
           in: 'query',
           required: !(type as string).endsWith('?'),
+          description: route.descriptions?.[name],
           schema: { type: (type as string).replace('?', '').replace('[]', '') },
         }));
     }
@@ -92,7 +94,11 @@ export function generateDocs(config: {
     if (route?.body && ['post', 'put', 'patch'].includes(method)) {
       operation.requestBody = {
         required: true,
-        content: { 'application/json': { schema: toJsonSchema(route.body as SchemaDefinition) } },
+        content: {
+          'application/json': {
+            schema: toJsonSchema(route.body as SchemaDefinition, route.descriptions),
+          },
+        },
       };
     }
 

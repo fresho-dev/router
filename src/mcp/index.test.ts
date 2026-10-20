@@ -7,7 +7,7 @@ import { describe, it } from 'node:test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { route, router } from '../index.js';
-import { bearerAuth } from '../middleware/index.js';
+import { bearerAuth, jwtAuth, jwtSign } from '../middleware/index.js';
 import { mcp, oauthProtectedResource } from './index.js';
 
 const auth = bearerAuth({ verify: (token) => (token === 'good' ? { uid: 'u1' } : null) });
@@ -21,12 +21,16 @@ const users = router(
     }),
     post: route({
       description: 'Create a user',
+      operationId: 'create_user',
       body: { name: 'string', address: { city: 'string' }, tags: 'string[]?' },
+      descriptions: { name: 'Full name', 'address.city': 'City of residence' },
+      mcp: { annotations: { destructiveHint: false } },
       handler: async (c) => c.body,
     }),
     $id: router({
       get: async (c) => ({ id: c.path.id, uid: (c as unknown as { uid: string }).uid }),
       delete: async () => new Response('gone', { status: 404 }),
+      notes: router({ post: async (c) => c.request.json() }),
     }),
   },
   auth,
@@ -34,7 +38,10 @@ const users = router(
 
 const app = router({
   users,
-  mcp: mcp({ users }, { name: 'test', version: '1.0.0', instructions: 'Use the tools.' }),
+  mcp: mcp(
+    { users },
+    { name: 'test', version: '1.0.0', instructions: 'Use the tools.', public: true },
+  ),
   secure: router({
     mcp: mcp(
       { users },
@@ -65,48 +72,59 @@ const text = (result: Record<string, unknown>) =>
   (result.content as { type: string; text: string }[])[0].text;
 
 describe('mcp', () => {
-  it('lists one tool per route with JSON schemas', async () => {
+  it('lists one tool per route with flat JSON schemas', async () => {
     const client = await connect();
     const { tools } = await client.listTools();
 
     assert.deepStrictEqual(
       tools.map((t) => t.name),
-      ['get_users', 'post_users', 'get_users_by_id', 'delete_users_by_id'],
+      [
+        'get_users',
+        'create_user',
+        'get_users_by_id',
+        'delete_users_by_id',
+        'post_users_by_id_notes',
+      ],
     );
     assert.strictEqual(tools[0].description, 'List users');
     assert.strictEqual(tools[2].description, 'GET /users/{id}');
     assert.deepStrictEqual(tools[0].inputSchema, {
       type: 'object',
-      properties: {
-        query: { type: 'object', properties: { limit: { type: 'number' } } },
-      },
+      properties: { limit: { type: 'number' } },
     });
     assert.deepStrictEqual(tools[1].inputSchema, {
       type: 'object',
       properties: {
-        body: {
+        name: { type: 'string', description: 'Full name' },
+        address: {
           type: 'object',
-          properties: {
-            name: { type: 'string' },
-            address: {
-              type: 'object',
-              properties: { city: { type: 'string' } },
-              required: ['city'],
-            },
-            tags: { type: 'array', items: { type: 'string' } },
-          },
-          required: ['name', 'address'],
+          properties: { city: { type: 'string', description: 'City of residence' } },
+          required: ['city'],
         },
+        tags: { type: 'array', items: { type: 'string' } },
       },
-      required: ['body'],
+      required: ['name', 'address'],
     });
     assert.deepStrictEqual(tools[3].inputSchema, {
       type: 'object',
-      properties: {
-        path: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
-      },
-      required: ['path'],
+      properties: { id: { type: 'string' } },
+      required: ['id'],
     });
+  });
+
+  it('sets annotations from the method, with route overrides', async () => {
+    const client = await connect();
+    const { tools } = await client.listTools();
+    assert.deepStrictEqual(
+      tools.map((t) => t.annotations),
+      [
+        { readOnlyHint: true },
+        { destructiveHint: false },
+        { readOnlyHint: true },
+        { destructiveHint: true, idempotentHint: true },
+        {},
+      ],
+    );
   });
 
   it('passes instructions and server info', async () => {
@@ -118,25 +136,30 @@ describe('mcp', () => {
   it('calls routes with query, body and path arguments', async () => {
     const client = await connect();
 
-    const list = await client.callTool({ name: 'get_users', arguments: { query: { limit: 5 } } });
+    const list = await client.callTool({ name: 'get_users', arguments: { limit: 5 } });
     assert.strictEqual(list.isError, false);
     assert.deepStrictEqual(JSON.parse(text(list)), { limit: 5 });
+    assert.deepStrictEqual(list.structuredContent, { limit: 5 });
 
     const body = { name: 'Ada', address: { city: 'London' }, tags: ['x'] };
-    const created = await client.callTool({ name: 'post_users', arguments: { body } });
+    const created = await client.callTool({ name: 'create_user', arguments: body });
     assert.deepStrictEqual(JSON.parse(text(created)), body);
 
-    const one = await client.callTool({
-      name: 'get_users_by_id',
-      arguments: { path: { id: 'a/b' } },
-    });
+    const one = await client.callTool({ name: 'get_users_by_id', arguments: { id: 'a/b' } });
     assert.deepStrictEqual(JSON.parse(text(one)), { id: 'a/b', uid: 'u1' });
+
+    // Without a body schema, arguments that aren't path params become the body.
+    const note = await client.callTool({
+      name: 'post_users_by_id_notes',
+      arguments: { id: '1', text: 'hi' },
+    });
+    assert.deepStrictEqual(JSON.parse(text(note)), { text: 'hi' });
   });
 
   it('reports validation and HTTP errors as tool errors', async () => {
     const client = await connect();
 
-    const invalid = await client.callTool({ name: 'post_users', arguments: { body: {} } });
+    const invalid = await client.callTool({ name: 'create_user', arguments: {} });
     assert.strictEqual(invalid.isError, true);
     assert.match(text(invalid), /Invalid request body/);
 
@@ -146,10 +169,11 @@ describe('mcp', () => {
 
     const gone = await client.callTool({
       name: 'delete_users_by_id',
-      arguments: { path: { id: '1' } },
+      arguments: { id: '1' },
     });
     assert.strictEqual(gone.isError, true);
     assert.strictEqual(text(gone), 'gone');
+    assert.strictEqual(gone.structuredContent, undefined);
   });
 
   it('rejects unknown tools', async () => {
@@ -178,10 +202,78 @@ describe('mcp', () => {
       () =>
         mcp(
           { a: router({ by_id: router({ get: handler }), $id: router({ get: handler }) }) },
-          { name: 'x', version: '1' },
+          { name: 'x', version: '1', public: true },
         ),
       /Duplicate tool name: get_a_by_id/,
     );
+    const named = (operationId: string) =>
+      router({ get: route({ operationId, handler }), b: router({ get: handler }) });
+    assert.throws(
+      () => mcp({ a: named('get_a_b') }, { name: 'x', version: '1', public: true }),
+      /Duplicate tool name: get_a_b/,
+    );
+  });
+
+  it('rejects invalid operationIds', () => {
+    const handler = async () => ({});
+    for (const operationId of ['has space', 'x'.repeat(129), '']) {
+      assert.throws(
+        () =>
+          mcp(
+            { a: router({ get: route({ operationId, handler }) }) },
+            { name: 'x', version: '1', public: true },
+          ),
+        /Invalid tool name/,
+      );
+    }
+  });
+
+  it('rejects arguments with the same name in several sources', () => {
+    const handler = async () => ({});
+    assert.throws(
+      () =>
+        mcp(
+          { a: router({ $id: router({ post: route({ body: { id: 'string' }, handler }) }) }) },
+          { name: 'x', version: '1', public: true },
+        ),
+      /Duplicate argument id in tool post_a_by_id/,
+    );
+  });
+
+  it('requires endpoint middleware unless public', () => {
+    const tree = { a: router({ get: async () => ({}) }) };
+    assert.throws(() => mcp(tree, { name: 'x', version: '1' }), /public: true/);
+    assert.ok(mcp(tree, { name: 'x', version: '1', public: true }));
+    assert.ok(mcp(tree, { name: 'x', version: '1' }, auth));
+  });
+
+  it('answers unauthenticated tool calls with HTTP 401 behind jwtAuth', async () => {
+    const secret = 'jwt-secret';
+    const guarded = router({
+      mcp: mcp({ users }, { name: 'x', version: '1' }, jwtAuth({ secret, claims: () => ({}) })),
+    }).handler();
+    const call = (headers: Record<string, string>) =>
+      guarded(
+        new Request('http://localhost/mcp', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json, text/event-stream',
+            ...headers,
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'tools/call',
+            params: { name: 'get_users', arguments: {} },
+          }),
+        }),
+      );
+    const denied = await call({});
+    assert.strictEqual(denied.status, 401);
+    assert.match(denied.headers.get('WWW-Authenticate') ?? '', /^Bearer/);
+    const token = await jwtSign({ sub: 'u1' }, secret);
+    assert.strictEqual((await call({ Authorization: `Bearer ${token}` })).status, 200);
   });
 
   describe('oauth', () => {
@@ -221,7 +313,7 @@ describe('mcp', () => {
     it('serves tools once authenticated', async () => {
       const client = await connect('/secure/mcp');
       const { tools } = await client.listTools();
-      assert.strictEqual(tools.length, 4);
+      assert.strictEqual(tools.length, 5);
     });
 
     it('serves protected resource metadata without authentication', async () => {
@@ -272,8 +364,8 @@ describe('mcp', () => {
     const opts = { name: 'test', version: '1.0.0' };
     const hardened = router({
       endpoint: router({ mcp: mcp({ profile }, opts, auth) }),
-      parent: router({ mcp: mcp({ profile }, opts) }, auth),
-      mcp: mcp({ inner }, opts),
+      parent: router({ mcp: mcp({ profile }, { ...opts, public: true }) }, auth),
+      mcp: mcp({ inner }, { ...opts, public: true }),
     });
     const fetchHardened = hardened.handler();
 
@@ -296,7 +388,7 @@ describe('mcp', () => {
 
     it('rejects dot segments in path parameters', async () => {
       for (const id of ['.', '..']) {
-        const result = await call('/mcp', 'delete_inner_by_id_sessions', { path: { id } });
+        const result = await call('/mcp', 'delete_inner_by_id_sessions', { id });
         assert.strictEqual(result.isError, true);
         assert.match(text(result), /Invalid path parameter: id/);
       }
@@ -323,7 +415,7 @@ describe('mcp', () => {
     });
 
     it('rejects non-scalar query arguments', async () => {
-      const result = await call('/mcp', 'get_inner_search', { query: { q: { a: 1 } } });
+      const result = await call('/mcp', 'get_inner_search', { q: { a: 1 } });
       assert.strictEqual(result.isError, true);
       assert.match(text(result), /Invalid query parameter: q/);
     });
@@ -361,7 +453,9 @@ describe('mcp', () => {
 
     it('builds names clients accept', async () => {
       const handler = async () => ({});
-      const app = router({ mcp: mcp({ v: router({ 'v1.0': router({ get: handler }) }) }, opts) });
+      const app = router({
+        mcp: mcp({ v: router({ 'v1.0': router({ get: handler }) }) }, { ...opts, public: true }),
+      });
       const client = new Client({ name: 'test-client', version: '1.0.0' });
       const fetchNamed = app.handler();
       await client.connect(
@@ -374,8 +468,8 @@ describe('mcp', () => {
         ['get_v_v1_0'],
       );
       assert.throws(
-        () => mcp({ ['x'.repeat(130)]: router({ get: handler }) }, opts),
-        /Tool name too long/,
+        () => mcp({ ['x'.repeat(130)]: router({ get: handler }) }, { ...opts, public: true }),
+        /Invalid tool name/,
       );
     });
   });

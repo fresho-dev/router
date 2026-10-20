@@ -114,6 +114,20 @@ export type TypedHandler<
   context: Context<Q, B, P, Ctx>,
 ) => R | Response | TypedResponse<R> | Promise<R | Response | TypedResponse<R>>;
 
+/** MCP tool behavior hints; defaults come from the HTTP method. */
+export interface ToolAnnotations {
+  /** Human-readable tool title. */
+  title?: string;
+  /** The tool does not modify its environment. */
+  readOnlyHint?: boolean;
+  /** The tool may perform destructive updates. */
+  destructiveHint?: boolean;
+  /** Repeating the call with the same arguments has no additional effect. */
+  idempotentHint?: boolean;
+  /** The tool interacts with external entities. */
+  openWorldHint?: boolean;
+}
+
 /**
  * Route definition - a single HTTP method handler with optional schemas.
  *
@@ -145,6 +159,12 @@ export interface RouteDefinition<
   body?: B;
   /** Optional description for documentation. */
   description?: string;
+  /** Operation name, used as the OpenAPI `operationId` and the MCP tool name. */
+  operationId?: string;
+  /** Field descriptions for docs and MCP, keyed by name (`address.city` for nested fields). */
+  descriptions?: Record<string, string>;
+  /** MCP tool settings. */
+  mcp?: { annotations?: ToolAnnotations };
   /** The request handler function. */
   handler: TypedHandler<InferSchema<Q>, InferSchema<B>, P, R, Ctx>;
 }
