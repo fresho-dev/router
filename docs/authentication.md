@@ -13,6 +13,7 @@
 - [API Reference](#api-reference)
   - [jwtSign](#jwtsign)
   - [jwtVerify](#jwtverify)
+  - [createJwks](#createjwks)
   - [jwtAuth](#jwtauth)
 
 ---
@@ -334,7 +335,8 @@ const token = await jwtSign(
   { email: 'user@example.com', role: 'admin' },  // Custom claims
   'your-secret-key',                              // Secret
   {
-    algorithm: 'HS256',   // HS256, HS384, or HS512 (default: HS256)
+    algorithm: 'HS256',   // HS256/384/512, or RS*, PS*, ES256/384 with a private CryptoKey
+    keyId: 'key-1',       // kid header (optional)
     expiresIn: '7d',      // Token lifetime
     subject: 'user-123',  // sub claim (typically user ID)
     issuer: 'my-app',     // iss claim
@@ -347,7 +349,8 @@ const token = await jwtSign(
 
 | Option | Type | Description |
 |--------|------|-------------|
-| `algorithm` | `'HS256' \| 'HS384' \| 'HS512'` | Signing algorithm (default: `'HS256'`) |
+| `algorithm` | `JwtAlgorithm` | Signing algorithm (default: `'HS256'`); asymmetric algorithms need a private `CryptoKey` |
+| `keyId` | `string` | `kid` header, used by verifiers to pick a key from a JWKS |
 | `expiresIn` | `string \| number` | Token lifetime: `'1h'`, `'7d'`, `'30m'`, or seconds |
 | `notBefore` | `string \| number` | Token not valid until this time from now |
 | `subject` | `string` | `sub` claim (typically user ID) |
@@ -381,14 +384,43 @@ const payload = await jwtVerify(token, secret, { algorithms: ['HS512'] });
 
 | Option | Type | Description |
 |--------|------|-------------|
-| `algorithms` | `JwtAlgorithm[]` | Allowed algorithms (default: `['HS256']`) |
+| `algorithms` | `JwtAlgorithm[]` | Allowed algorithms (default: `['HS256']` for HMAC secrets, `['RS256']` otherwise) |
+| `issuer` | `string \| string[]` | Required `iss`; any listed value is accepted |
+| `audience` | `string \| string[]` | Required `aud`; the token must contain at least one listed value |
+| `clockTolerance` | `number` | Seconds of clock skew allowed on `exp` and `nbf` (default: `0`); 30-60 is typical for third-party tokens |
+
+**Supported algorithms:** `HS256`, `HS384`, `HS512` (string, `ArrayBuffer`/`Uint8Array` or HMAC `CryptoKey`), and `RS256/384/512`, `PS256/384/512`, `ES256/384` (public `CryptoKey` or JWKS). A key is only used for the algorithm it was created for, so an `HS256` token can never be checked against a public key. RSA keys shorter than 2048 bits are rejected.
 
 **Throws:**
-- `'Invalid JWT format'` - Token doesn't have 3 parts
+- `'Invalid JWT format'` - Token doesn't have 3 parts or a segment isn't a JSON object
 - `'Unsupported algorithm'` - Token uses algorithm not in allowed list
+- `'Key does not match algorithm'` - The key or JWKS can't verify the token's algorithm
+- `'No matching key in JWKS'` - No key (or more than one, when the token has no `kid`) fits the token
 - `'Invalid signature'` - Signature verification failed
 - `'Token expired'` - Token's `exp` claim is in the past
 - `'Token not yet valid'` - Token's `nbf` claim is in the future
+- `'Invalid issuer'` / `'Invalid audience'` - `iss` or `aud` doesn't match
+
+### createJwks
+
+Creates a cached remote JSON Web Key Set for verifying tokens issued by an OAuth or OpenID Connect provider (Auth0, Okta, Entra ID, Cognito, Keycloak, Google, ...). Create it once, at module scope, and pass it wherever a secret is expected.
+
+```typescript
+import { createJwks, jwtVerify } from '@fresho/router/auth';
+
+const jwks = createJwks('https://example.auth0.com/.well-known/jwks.json');
+
+const payload = await jwtVerify(token, jwks, {
+  algorithms: ['RS256'],
+  issuer: 'https://example.auth0.com/',
+  audience: 'https://api.example.com',
+});
+```
+
+- Keys are picked by the token's `kid` and must match its algorithm (`kty`, `crv`, and `alg`/`use` when present). A token without `kid` is accepted only if exactly one key fits.
+- Keys are cached for 10 minutes. An unknown `kid` triggers a reload, so key rotation is picked up. The provider is fetched at most once every 30 seconds (with a 5 second timeout), whether fetches succeed or fail, so random `kid`s or an outage can't hammer it. Concurrent requests share one fetch.
+- If a reload fails or returns no keys, the previously fetched keys stay in use, even past the 10 minutes, and the reload is retried at most every 30 seconds. An outage at the provider therefore doesn't take down auth, but a key the provider revokes keeps verifying until a reload succeeds.
+- Always set `issuer` and `audience` for third-party tokens; otherwise any token the provider signs for another application is accepted.
 
 ### jwtAuth
 
@@ -411,13 +443,32 @@ jwtAuth({
     },
   }),
 
-  // Optional: allowed algorithms (default: ['HS256'])
+  // Optional: allowed algorithms (default: ['HS256'] for HMAC secrets, ['RS256'] otherwise)
   algorithms: ['HS256', 'HS384', 'HS512'],
+
+  // Optional: required iss / aud claims
+  issuer: 'my-app',
+  audience: 'my-api',
 
   // Optional: custom token extraction (default: Authorization header or 'token' cookie)
   getToken: (request) => {
     return request.headers.get('X-Auth-Token');
   },
+});
+```
+
+**Third-party providers:** pass a key set from [`createJwks`](#createjwks) as the secret:
+
+```typescript
+const jwks = createJwks('https://example.auth0.com/.well-known/jwks.json');
+
+jwtAuth({
+  secret: jwks,
+  algorithms: ['RS256'],
+  issuer: 'https://example.auth0.com/',
+  audience: 'https://api.example.com',
+  clockTolerance: 60,
+  claims: (payload) => ({ user: { id: payload.sub } }),
 });
 ```
 

@@ -11,6 +11,7 @@ import type { Middleware, MiddlewareContext } from '../middleware.js';
 
 // Re-export types that middleware users need
 export type {
+  Jwks,
   JwtAlgorithm,
   JwtPayload,
   JwtSecret,
@@ -19,7 +20,7 @@ export type {
 } from '../auth/jwt.js';
 
 // Re-export utilities that are commonly used alongside middleware
-export { jwtSign, jwtVerify } from '../auth/jwt.js';
+export { createJwks, jwtSign, jwtVerify } from '../auth/jwt.js';
 
 // =============================================================================
 // Basic Auth Middleware
@@ -107,8 +108,14 @@ export interface JwtAuthOptions<Ctx = {}> {
    * The returned object is merged into the middleware context.
    */
   claims: (payload: JwtPayload) => Record<string, unknown> | null;
-  /** Allowed algorithms (default: ['HS256']). */
+  /** Allowed algorithms (default: ['HS256'] for HMAC secrets, ['RS256'] otherwise). */
   algorithms?: JwtAlgorithm[];
+  /** Required issuer (`iss`). */
+  issuer?: string | string[];
+  /** Required audience (`aud`); the token must contain at least one of the given values. */
+  audience?: string | string[];
+  /** Seconds of clock skew allowed when checking `exp` and `nbf` (default: 0). */
+  clockTolerance?: number;
   /** Function to extract token from request (default: Authorization header or 'token' cookie). */
   getToken?: (request: Request) => string | null;
 }
@@ -172,7 +179,12 @@ export function jwtAuth<Ctx = {}>(options: JwtAuthOptions<Ctx>): Middleware<Ctx>
       const secret =
         typeof options.secret === 'function' ? options.secret(context) : options.secret;
 
-      const payload = await jwtVerify(token, secret, { algorithms: options.algorithms });
+      const payload = await jwtVerify(token, secret, {
+        algorithms: options.algorithms,
+        issuer: options.issuer,
+        audience: options.audience,
+        clockTolerance: options.clockTolerance,
+      });
 
       // Map payload to context properties.
       const claims = options.claims(payload);
@@ -187,7 +199,8 @@ export function jwtAuth<Ctx = {}>(options: JwtAuthOptions<Ctx>): Middleware<Ctx>
       return new Response(message, {
         status: 401,
         headers: {
-          'WWW-Authenticate': `Bearer error="invalid_token", error_description="${message}"`,
+          // Fixed value: messages can carry token or JWKS content, unsafe in a header.
+          'WWW-Authenticate': 'Bearer error="invalid_token"',
         },
       });
     }

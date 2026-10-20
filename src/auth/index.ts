@@ -33,13 +33,14 @@ export { encodeBasicAuth, extractBasicAuthToken, parseBasicAuth } from './basic.
 
 // JWT utilities
 export type {
+  Jwks,
   JwtAlgorithm,
   JwtPayload,
   JwtSecret,
   SignJwtOptions,
   VerifyJwtOptions,
 } from './jwt.js';
-export { jwtSign, jwtVerify } from './jwt.js';
+export { createJwks, jwtSign, jwtVerify } from './jwt.js';
 
 // OAuth utilities
 export type {

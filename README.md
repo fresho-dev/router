@@ -230,7 +230,7 @@ See **[Middleware Documentation](docs/middleware.md)** for detailed usage.
 For standalone auth utilities (JWT signing/verification, Basic auth, OAuth), import from `@fresho/router/auth`:
 
 ```typescript
-import { jwtSign, jwtVerify, parseBasicAuth } from "@fresho/router/auth";
+import { createJwks, jwtSign, jwtVerify, parseBasicAuth } from "@fresho/router/auth";
 
 // Sign a JWT
 const token = await jwtSign({ uid: "user-123" }, secret, { expiresIn: "1h" });
@@ -238,12 +238,20 @@ const token = await jwtSign({ uid: "user-123" }, secret, { expiresIn: "1h" });
 // Verify a JWT
 const payload = await jwtVerify(token, secret);
 
+// Verify a third-party OAuth/OIDC token against the provider's JWKS
+const jwks = createJwks("https://example.auth0.com/.well-known/jwks.json");
+const claims = await jwtVerify(accessToken, jwks, {
+	algorithms: ["RS256"],
+	issuer: "https://example.auth0.com/",
+	audience: "https://api.example.com",
+});
+
 // Parse Basic auth header
 const creds = parseBasicAuth(request.headers.get("Authorization"));
 ```
 
 Available utilities:
-- **JWT**: `jwtSign`, `jwtVerify`
+- **JWT**: `jwtSign`, `jwtVerify`, `createJwks` (HS*, RS*, PS*, ES256/384)
 - **Basic Auth**: `parseBasicAuth`, `encodeBasicAuth`, `extractBasicAuthToken`
 - **OAuth**: `encodeOAuthState`, `decodeOAuthState`, `exchangeCode`, `refreshAccessToken`, `revokeToken`, `buildAuthorizationUrl`, `OAUTH_PROVIDERS`
 
