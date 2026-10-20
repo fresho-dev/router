@@ -114,6 +114,8 @@ export interface JwtAuthOptions<Ctx = {}> {
   issuer?: string | string[];
   /** Required audience (`aud`); the token must contain at least one of the given values. */
   audience?: string | string[];
+  /** Seconds of clock skew allowed when checking `exp` and `nbf` (default: 0). */
+  clockTolerance?: number;
   /** Function to extract token from request (default: Authorization header or 'token' cookie). */
   getToken?: (request: Request) => string | null;
 }
@@ -181,6 +183,7 @@ export function jwtAuth<Ctx = {}>(options: JwtAuthOptions<Ctx>): Middleware<Ctx>
         algorithms: options.algorithms,
         issuer: options.issuer,
         audience: options.audience,
+        clockTolerance: options.clockTolerance,
       });
 
       // Map payload to context properties.

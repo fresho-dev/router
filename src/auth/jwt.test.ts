@@ -437,6 +437,56 @@ describe('Asymmetric JWT', () => {
       }
     });
 
+    it('should allow clockTolerance seconds of skew on exp and nbf', async () => {
+      const now = Math.floor(Date.now() / 1000);
+      const expired = await jwtSign({ exp: now - 30 }, 'secret');
+      const early = await jwtSign({ nbf: now + 30 }, 'secret');
+      await assert.rejects(() => jwtVerify(expired, 'secret'), /Token expired/);
+      await assert.rejects(() => jwtVerify(early, 'secret'), /Token not yet valid/);
+      await jwtVerify(expired, 'secret', { clockTolerance: 60 });
+      await jwtVerify(early, 'secret', { clockTolerance: 60 });
+      await assert.rejects(
+        () => jwtVerify(expired, 'secret', { clockTolerance: 10 }),
+        /Token expired/,
+      );
+    });
+
+    it('should reject RSA keys shorter than 2048 bits', async () => {
+      const weak = (await crypto.subtle.generateKey(
+        {
+          name: 'RSASSA-PKCS1-v1_5',
+          modulusLength: 1024,
+          publicExponent: new Uint8Array([1, 0, 1]),
+          hash: 'SHA-256',
+        },
+        true,
+        ['sign', 'verify'],
+      )) as CryptoKeyPair;
+      const header = b64url(JSON.stringify({ alg: 'RS256', kid: 'weak' }));
+      const data = `${header}.${b64url('{}')}`;
+      const sig = await crypto.subtle.sign(
+        'RSASSA-PKCS1-v1_5',
+        weak.privateKey,
+        new TextEncoder().encode(data),
+      );
+      const token = `${data}.${b64url(new Uint8Array(sig))}`;
+      await assert.rejects(() => jwtVerify(token, weak.publicKey), /Key does not match/);
+      await assert.rejects(
+        () => jwtSign({}, weak.privateKey, { algorithm: 'RS256' }),
+        /Key does not match/,
+      );
+      const weakJwk = await jwk(weak, 'weak');
+      const server = serveJwks(() => [weakJwk]);
+      try {
+        await assert.rejects(
+          () => jwtVerify(token, createJwks('https://idp.example.com/weak')),
+          /Key does not match/,
+        );
+      } finally {
+        server.restore();
+      }
+    });
+
     it('should reject non-numeric exp and nbf', async () => {
       for (const claims of [{ exp: 0 }, { exp: 'soon' }, { exp: null }, { nbf: 'later' }]) {
         const token = await jwtSign(claims, 'secret');

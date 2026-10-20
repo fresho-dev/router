@@ -91,6 +91,8 @@ export interface VerifyJwtOptions {
   issuer?: string | string[];
   /** Required audience (`aud`); the token must contain at least one of the given values. */
   audience?: string | string[];
+  /** Seconds of clock skew allowed when checking `exp` and `nbf` (default: 0). */
+  clockTolerance?: number;
 }
 
 // =============================================================================
@@ -121,9 +123,16 @@ const ALGORITHMS: Record<JwtAlgorithm, AlgorithmSpec> = {
 
 /** Checks that a CryptoKey was created for exactly this algorithm. */
 function keyMatches(key: CryptoKey, spec: AlgorithmSpec): boolean {
-  const alg = key.algorithm as KeyAlgorithm & { hash?: { name: string }; namedCurve?: string };
+  const alg = key.algorithm as KeyAlgorithm & {
+    hash?: { name: string };
+    namedCurve?: string;
+    modulusLength?: number;
+  };
   if (alg.name !== spec.name) return false;
-  return spec.name === 'ECDSA' ? alg.namedCurve === spec.namedCurve : alg.hash?.name === spec.hash;
+  if (spec.name === 'ECDSA') return alg.namedCurve === spec.namedCurve;
+  // Web Crypto accepts RSA keys too weak for signatures (RFC 7518 §3.3 requires 2048 bits).
+  if (spec.name !== 'HMAC' && (alg.modulusLength ?? 0) < 2048) return false;
+  return alg.hash?.name === spec.hash;
 }
 
 /** Checks that a JWK may be used to verify this algorithm. */
@@ -388,10 +397,17 @@ export async function jwtVerify(
   const payload = decodeSegment(payloadB64);
 
   const now = Date.now() / 1000;
-  if (payload.exp !== undefined && !(typeof payload.exp === 'number' && payload.exp >= now)) {
+  const tolerance = options.clockTolerance ?? 0;
+  if (
+    payload.exp !== undefined &&
+    !(typeof payload.exp === 'number' && payload.exp + tolerance >= now)
+  ) {
     throw new Error('Token expired');
   }
-  if (payload.nbf !== undefined && !(typeof payload.nbf === 'number' && payload.nbf <= now)) {
+  if (
+    payload.nbf !== undefined &&
+    !(typeof payload.nbf === 'number' && payload.nbf - tolerance <= now)
+  ) {
     throw new Error('Token not yet valid');
   }
 
