@@ -339,3 +339,30 @@ export function compileSchema<T extends SchemaDefinition>(
     },
   };
 }
+
+/** JSON Schema object produced by {@link toJsonSchema}. */
+export interface JsonSchemaObject {
+  type: 'object';
+  properties: Record<string, unknown>;
+  required: string[];
+}
+
+/** Converts a schema definition to JSON Schema, recursing into nested objects. */
+export function toJsonSchema(schema: SchemaDefinition): JsonSchemaObject {
+  const properties: Record<string, unknown> = {};
+  const required: string[] = [];
+  for (const [key, field] of Object.entries(schema)) {
+    if (isNestedSchema(field)) {
+      properties[key] = toJsonSchema(field);
+      required.push(key);
+      continue;
+    }
+    const optional = field.endsWith('?');
+    const base = optional ? field.slice(0, -1) : field;
+    const primitive = base.replace('[]', '');
+    const item = primitive === 'unknown' ? {} : { type: primitive };
+    properties[key] = base.endsWith('[]') ? { type: 'array', items: item } : item;
+    if (!optional) required.push(key);
+  }
+  return { type: 'object', properties, required };
+}

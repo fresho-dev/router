@@ -152,6 +152,37 @@ describe('docs', () => {
       assert.ok((schema.properties as Record<string, unknown>).age);
     });
 
+    it('describes nested objects and arrays in the request body', () => {
+      const spec = generateDocs({
+        title: 'Test',
+        version: '1.0.0',
+        router: router({
+          test: router({
+            post: route({
+              body: { address: { city: 'string' }, tags: 'string[]?' },
+              handler: async () => ({}),
+            }),
+          }),
+        }),
+      }) as any;
+
+      assert.deepStrictEqual(
+        spec.paths['/test'].post.requestBody.content['application/json'].schema,
+        {
+          type: 'object',
+          properties: {
+            address: {
+              type: 'object',
+              properties: { city: { type: 'string' } },
+              required: ['city'],
+            },
+            tags: { type: 'array', items: { type: 'string' } },
+          },
+          required: ['address'],
+        },
+      );
+    });
+
     it('does not include body for GET', () => {
       const spec = generateDocs({
         title: 'Test',

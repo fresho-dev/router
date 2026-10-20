@@ -45,6 +45,7 @@ export default { fetch: api.handler() };
 - **Typed HTTP client** — call your API with full type safety
 - **Typed local client** — test handlers directly without HTTP
 - **OpenAPI generation** — auto-generate docs from your routes
+- **MCP server** — expose routes as tools for AI agents
 - **Middleware** — cors, auth, rate limiting, and more
 - **Streaming** — SSE and JSON lines helpers
 - **HTTP-compliant** — automatic HEAD support for GET routes
@@ -379,6 +380,47 @@ const docs = router({
 	}),
 });
 ```
+
+## MCP Server
+
+Expose routes as [Model Context Protocol](https://modelcontextprotocol.io) tools, so agents can use the same API as your other clients. Requires the optional peer dependency `@modelcontextprotocol/sdk`:
+
+```bash
+npm install @modelcontextprotocol/sdk
+```
+
+```typescript
+import { router } from "@fresho/router";
+import { mcp } from "@fresho/router/mcp";
+
+const api = router({
+	users,
+	billing,
+	mcp: mcp({ users }, { name: "my-api", version: "1.0.0" }),
+});
+```
+
+- **Tools** — one per route: `get_users`, `post_users`, `get_users_by_id`, ... Descriptions come from `route.description`; inputs are `{ path, query, body }` as JSON Schema derived from the route's schemas.
+- **Calls** — each tool call is dispatched as an HTTP request through the router with the caller's headers forwarded, so route middleware (auth, rate limits) applies. Responses become text content; status 400 and above sets `isError`.
+- **Transport** — stateless Streamable HTTP with JSON responses; `GET` and `DELETE` return 405.
+- Pass a router to expose all of its routes, or a record of routers to mount them under their keys.
+
+### OAuth
+
+Put auth middleware on the endpoint so unauthenticated clients get an HTTP 401, and set `oauth` to advertise your authorization server (RFC 9728):
+
+```typescript
+const oauth = { authorizationServers: ["https://auth.example.com"], scopes: ["users:read"] };
+
+const app = router({
+	users,
+	mcp: mcp({ users }, { name: "my-api", version: "1.0.0", oauth }, jwtAuth({ ... })),
+	// Optional: metadata at the origin root, for clients that probe it before calling the endpoint.
+	".well-known": oauthProtectedResource(oauth),
+});
+```
+
+401s from the endpoint gain `WWW-Authenticate: Bearer resource_metadata="https://host/mcp/.well-known/oauth-protected-resource"`, and that URL serves the metadata without authentication. Validate that tokens were issued for this server (the `aud` claim), not just by your authorization server.
 
 ## Streaming
 
