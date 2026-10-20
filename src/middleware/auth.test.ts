@@ -253,6 +253,19 @@ describe('Authentication Middleware', () => {
       assert.strictEqual(context.user, 'user123');
     });
 
+    it('should reject tokens for another audience', async () => {
+      const middleware = jwtAuth({ secret: 'test-secret', audience: 'api', claims: defaultClaims });
+      const token = await createTestJwt({ sub: 'user123', aud: 'other' }, 'test-secret');
+      context.request = new Request('http://example.com/test', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const response = await middleware(context, next);
+
+      assert.strictEqual(response.status, 401);
+      assert.strictEqual(nextCalled, false);
+    });
+
     it('should reject invalid tokens', async () => {
       const middleware = jwtAuth({
         secret: 'test-secret',
