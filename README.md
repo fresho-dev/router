@@ -45,6 +45,7 @@ export default { fetch: api.handler() };
 - **Typed HTTP client** — call your API with full type safety
 - **Typed local client** — test handlers directly without HTTP
 - **OpenAPI generation** — auto-generate docs from your routes
+- **MCP server** — expose routes as tools for AI agents
 - **Middleware** — cors, auth, rate limiting, and more
 - **Streaming** — SSE and JSON lines helpers
 - **HTTP-compliant** — automatic HEAD support for GET routes
@@ -387,6 +388,52 @@ const docs = router({
 	}),
 });
 ```
+
+## MCP Server
+
+Expose routes as [Model Context Protocol](https://modelcontextprotocol.io) tools, so agents can use the same API as your other clients. Requires the optional peer dependency `@modelcontextprotocol/sdk`:
+
+```bash
+npm install @modelcontextprotocol/sdk
+```
+
+```typescript
+import { router } from "@fresho/router";
+import { mcp } from "@fresho/router/mcp";
+
+const api = router({
+	users,
+	billing,
+	mcp: mcp({ users }, { name: "my-api", version: "1.0.0" }, bearerAuth({ verify })),
+});
+```
+
+`mcp()` requires endpoint middleware (usually auth). Pass `public: true` instead when the endpoint is open, or already guarded by middleware on its parent routers.
+
+- **Tools** — one per route, named from the method and path (`get_users`, `post_users`, `get_users_by_id`, ...) unless the route sets `operationId` (also used in OpenAPI). Descriptions come from `route.description`.
+- **Arguments** — flat: path params, query fields and body fields side by side (`{ id, text }`), as JSON Schema derived from the route's schemas. Names must be unique across the three; a clash throws when `mcp()` is called. `descriptions: { field: '...', 'address.city': '...' }` on a route documents fields for agents and OpenAPI. Array query params are left out, since the router can't parse them from query strings. Without a body schema, `post`/`put`/`patch` tools send any other arguments as the body.
+- **Annotations** — `get` tools are marked `readOnlyHint`, `delete` tools `destructiveHint` and `idempotentHint`, and `put` tools `idempotentHint`, so clients can decide when to ask for confirmation. Override per route with `mcp: { annotations: { ... } }`.
+- **Calls** — each tool call is dispatched as an HTTP request through the given routers with the caller's headers forwarded. Middleware on the MCP endpoint (passed to `mcp()` or on its parent routers) runs once per MCP request, and what it adds to the context (e.g. `c.user`) reaches handlers; middleware on the given routers and below runs on every call. Middleware on the given routers' *own* parents elsewhere in your app does **not** run, so guard the endpoint or the routers themselves. Responses become text content, plus `structuredContent` when the body is a JSON object; a non-2xx status sets `isError`, and streaming (SSE, NDJSON) responses are rejected.
+- **Safety** — requests with an `Origin` other than the endpoint's get 403 (as the MCP spec requires against DNS rebinding), so browser-hosted clients on other origins can't connect. Path parameters can't be `.` or `..`, and handler exceptions become a generic `Internal error`.
+- **Transport** — stateless Streamable HTTP with JSON responses; `GET` and `DELETE` return 405.
+- Pass a router to expose all of its routes, or a record of routers to mount them under their keys.
+
+### OAuth
+
+Put auth middleware on the endpoint so unauthenticated clients get an HTTP 401, and set `oauth` to advertise your authorization server (RFC 9728):
+
+```typescript
+const oauth = { authorizationServers: ["https://auth.example.com"], scopes: ["users:read"] };
+
+const app = router({
+	users,
+	mcp: mcp({ users }, { name: "my-api", version: "1.0.0", oauth }, jwtAuth({ ... })),
+	// Optional: metadata at the origin root, for clients that probe it before calling the endpoint.
+	".well-known": oauthProtectedResource(oauth),
+});
+```
+
+401s from the endpoint gain `WWW-Authenticate: Bearer resource_metadata="https://host/mcp/.well-known/oauth-protected-resource"`, and that URL serves the metadata without the endpoint's middleware (keep auth off the endpoint's parent routers, or the metadata is guarded too). `oauthProtectedResource` only handles single-segment endpoint paths such as `/mcp`. Validate that tokens were issued for this server (the `aud` claim), not just by your authorization server.
 
 ## Streaming
 

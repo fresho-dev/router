@@ -127,6 +127,7 @@ export {
   type Router,
   type RouterBrand,
   type RouterRoutes,
+  type ToolAnnotations,
   type TypedHandler,
   type TypedResponse,
 } from './types.js';

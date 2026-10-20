@@ -47,4 +47,34 @@ describe('Cloudflare Workers runtime', () => {
     assert.strictEqual(response.headers.get('Content-Type'), 'text/event-stream');
     assert.match(await response.text(), /event: ready\ndata: {"runtime":"workerd"}/);
   });
+
+  it('serves MCP tool calls', async () => {
+    const rpc = (id, method, params) =>
+      server.fetch('/mcp', {
+        body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
+        headers: {
+          Accept: 'application/json, text/event-stream',
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      });
+
+    const list = await (await rpc(1, 'tools/list', {})).json();
+    assert.deepStrictEqual(
+      list.result.tools.map((tool) => tool.name),
+      ['get_echo', 'post_echo'],
+    );
+
+    const call = await (
+      await rpc(2, 'tools/call', {
+        name: 'get_echo',
+        arguments: { count: 2, message: 'hi' },
+      })
+    ).json();
+    assert.deepStrictEqual(call.result, {
+      content: [{ type: 'text', text: '{"count":2,"message":"hi"}' }],
+      structuredContent: { count: 2, message: 'hi' },
+      isError: false,
+    });
+  });
 });

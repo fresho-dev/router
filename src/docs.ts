@@ -9,12 +9,12 @@
  * - `get`, `post`, `put`, `patch`, `delete` = HTTP method handlers
  */
 
-import type { SchemaDefinition } from './schema.js';
+import { type SchemaDefinition, toJsonSchema } from './schema.js';
 import type { RouteDefinition, Router, RouterRoutes } from './types.js';
 import { HTTP_METHODS, isFunction, isRoute, isRouter } from './types.js';
 
 /** Collected route info for documentation. */
-interface CollectedRoute {
+export interface CollectedRoute {
   path: string;
   method: string;
   route: RouteDefinition | null;
@@ -28,8 +28,8 @@ function propertyToSegment(prop: string): string {
   return prop;
 }
 
-/** Collects all routes from a router tree. */
-function collectRoutes(routerDef: Router<RouterRoutes>, parentPath = ''): CollectedRoute[] {
+/** Collects all routes from a router tree, with `{param}` path segments. */
+export function collectRoutes(routerDef: Router<RouterRoutes>, parentPath = ''): CollectedRoute[] {
   const collectedRoutes: CollectedRoute[] = [];
 
   for (const [prop, entry] of Object.entries(routerDef.routes)) {
@@ -68,6 +68,7 @@ export function generateDocs(config: {
     }
 
     const operation: Record<string, unknown> = {
+      operationId: route?.operationId,
       description: route?.description,
       responses: {
         200: { description: 'Successful response' },
@@ -84,32 +85,18 @@ export function generateDocs(config: {
           name,
           in: 'query',
           required: !(type as string).endsWith('?'),
+          description: route.descriptions?.[name],
           schema: { type: (type as string).replace('?', '').replace('[]', '') },
         }));
     }
 
     // Add request body.
     if (route?.body && ['post', 'put', 'patch'].includes(method)) {
-      const bodySchema = route.body as SchemaDefinition;
       operation.requestBody = {
         required: true,
         content: {
           'application/json': {
-            schema: {
-              type: 'object',
-              properties: Object.fromEntries(
-                Object.entries(bodySchema).map(([name, type]) => {
-                  if (typeof type === 'string') {
-                    return [name, { type: type.replace('?', '').replace('[]', '') }];
-                  }
-                  // Nested object - simplified representation.
-                  return [name, { type: 'object' }];
-                }),
-              ),
-              required: Object.entries(bodySchema)
-                .filter(([, type]) => typeof type === 'string' && !type.endsWith('?'))
-                .map(([name]) => name),
-            },
+            schema: toJsonSchema(route.body as SchemaDefinition, route.descriptions),
           },
         },
       };

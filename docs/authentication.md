@@ -9,6 +9,7 @@
 - [Cookie-Based Auth](#cookie-based-auth)
 - [Token-Based Auth](#token-based-auth)
 - [Token Refresh](#token-refresh)
+- [MCP Endpoints](#mcp-endpoints)
 - [API Reference](#api-reference)
   - [jwtSign](#jwtsign)
   - [jwtVerify](#jwtverify)
@@ -287,6 +288,38 @@ refresh: router({
 ```
 
 ---
+
+## MCP Endpoints
+
+To let agents call your API through [`@fresho/router/mcp`](../README.md#mcp-server) with tokens from a third-party OAuth provider, verify them with the provider's JWKS on the MCP endpoint. An unauthenticated call then gets an HTTP 401 whose `WWW-Authenticate` header points the client at your authorization server.
+
+```typescript
+import { router } from '@fresho/router';
+import { mcp, oauthProtectedResource } from '@fresho/router/mcp';
+import { createJwks, jwtAuth } from '@fresho/router/middleware';
+
+const issuer = 'https://example.auth0.com/';
+const oauth = { authorizationServers: [issuer], scopes: ['users:read'] };
+
+const auth = jwtAuth({
+  secret: createJwks(`${issuer}.well-known/jwks.json`),
+  algorithms: ['RS256'],
+  issuer,
+  // Tokens must be issued for this server, not just by the provider.
+  audience: 'https://api.example.com/mcp',
+  // Allow for clock drift between the provider and this server.
+  clockTolerance: 60,
+  claims: (payload) => ({ user: { id: payload.sub } }),
+});
+
+export const app = router({
+  users,
+  mcp: mcp({ users }, { name: 'my-api', version: '1.0.0', oauth }, auth),
+  '.well-known': oauthProtectedResource(oauth),
+});
+```
+
+What `auth` puts on the context (`c.user`) reaches the `users` handlers on every tool call.
 
 ## API Reference
 

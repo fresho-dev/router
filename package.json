@@ -48,10 +48,14 @@
     "./middleware": {
       "types": "./dist/middleware/index.d.mts",
       "import": "./dist/middleware/index.mjs"
+    },
+    "./mcp": {
+      "types": "./dist/mcp/index.d.mts",
+      "import": "./dist/mcp/index.mjs"
     }
   },
   "scripts": {
-    "build": "tsdown src/index.ts src/auth/index.ts src/middleware/index.ts",
+    "build": "tsdown src/index.ts src/auth/index.ts src/middleware/index.ts src/mcp/index.ts",
     "clean": "rm -rf ./dist",
     "typecheck": "tsc --noEmit",
     "lint": "biome check . && npm run typecheck",
@@ -60,8 +64,17 @@
     "test:bun": "bun test src",
     "test:workers": "npm run build && node --test test/cloudflare-workers.test.mjs"
   },
+  "peerDependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1"
+  },
+  "peerDependenciesMeta": {
+    "@modelcontextprotocol/sdk": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@biomejs/biome": "2.3.8",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@types/node": "^22.0.0",
     "tsdown": "^0.17.0-beta.6",
     "tsx": "^4.19.0",

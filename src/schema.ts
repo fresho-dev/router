@@ -339,3 +339,45 @@ export function compileSchema<T extends SchemaDefinition>(
     },
   };
 }
+
+/** JSON Schema object produced by {@link toJsonSchema}. */
+export interface JsonSchemaObject {
+  type: 'object';
+  properties: Record<string, unknown>;
+  /** Omitted when empty, as OpenAPI 3.0 requires. */
+  required?: string[];
+}
+
+/**
+ * Converts a schema definition to JSON Schema, recursing into nested objects.
+ *
+ * @param descriptions - Field descriptions keyed by name, dotted for nested fields
+ * @param prefix - Dotted path of `schema` within the root, for nested lookups
+ */
+export function toJsonSchema(
+  schema: SchemaDefinition,
+  descriptions: Record<string, string> = {},
+  prefix = '',
+): JsonSchemaObject {
+  const properties: Record<string, unknown> = {};
+  const required: string[] = [];
+  for (const [key, field] of Object.entries(schema)) {
+    const description = descriptions[`${prefix}${key}`];
+    const described = description === undefined ? {} : { description };
+    if (isNestedSchema(field)) {
+      const nested = toJsonSchema(field, descriptions, `${prefix}${key}.`);
+      properties[key] = { ...nested, ...described };
+      required.push(key);
+      continue;
+    }
+    const optional = field.endsWith('?');
+    const base = optional ? field.slice(0, -1) : field;
+    const primitive = base.replace('[]', '');
+    const item = primitive === 'unknown' ? {} : { type: primitive };
+    properties[key] = base.endsWith('[]')
+      ? { type: 'array', items: item, ...described }
+      : { ...item, ...described };
+    if (!optional) required.push(key);
+  }
+  return { type: 'object', properties, ...(required.length > 0 && { required }) };
+}
