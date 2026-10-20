@@ -68,6 +68,23 @@ interface ToolRoute {
 }
 
 const METHODS_WITH_BODY = ['post', 'put', 'patch'];
+const CONTEXT_KEYS = new Set(['request', 'path', 'query', 'body', 'env', 'executionCtx']);
+// Describe the outer MCP request or connection, not the dispatched tool call.
+const DROPPED_HEADERS = [
+  'Connection',
+  'Content-Encoding',
+  'Content-Length',
+  'Content-Type',
+  'Keep-Alive',
+  'Mcp-Protocol-Version',
+  'Mcp-Session-Id',
+  'Proxy-Connection',
+  'TE',
+  'Trailer',
+  'Transfer-Encoding',
+  'Upgrade',
+];
+const STREAMING_TYPES = /^(text\/event-stream|application\/x-ndjson)/i;
 const TOOL_METHODS = new Set(['get', 'delete', ...METHODS_WITH_BODY]);
 const METADATA_PATH = '/.well-known/oauth-protected-resource';
 
@@ -84,7 +101,10 @@ function toolName(method: string, path: string): string {
     .split('/')
     .filter(Boolean)
     .map((s) => (s.startsWith('{') ? `by_${s.slice(1, -1)}` : s));
-  return [method, ...segments].join('_').replace(/[^A-Za-z0-9_.-]/g, '_');
+  const name = [method, ...segments].join('_').replace(/[^A-Za-z0-9_-]/g, '_');
+  // MCP allows up to 128 characters; some clients allow fewer.
+  if (name.length > 128) throw new Error(`Tool name too long: ${name}`);
+  return name;
 }
 
 /** Derives one tool per route in the tree. */
@@ -100,7 +120,7 @@ function collectTools(root: Router<RouterRoutes>): Map<string, ToolRoute> {
     const add = (key: string, schema: ReturnType<typeof toJsonSchema>) => {
       if (Object.keys(schema.properties).length === 0) return;
       properties[key] = schema;
-      if (schema.required.length > 0) required.push(key);
+      if (schema.required) required.push(key);
     };
     const params = [...path.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
     add('path', toJsonSchema(Object.fromEntries(params.map((p) => [p, 'string']))));
@@ -119,7 +139,7 @@ function collectTools(root: Router<RouterRoutes>): Map<string, ToolRoute> {
       tool: {
         name,
         description: route?.description ?? `${method.toUpperCase()} ${path}`,
-        inputSchema: { type: 'object', properties, required },
+        inputSchema: { type: 'object', properties, ...(required.length > 0 && { required }) },
       },
       method,
       path,
@@ -128,9 +148,12 @@ function collectTools(root: Router<RouterRoutes>): Map<string, ToolRoute> {
   return tools;
 }
 
+/** Sends a tool's request through the routes on behalf of the MCP request context `c`. */
+type Dispatch = (request: Request, c: Context) => Response | Promise<Response>;
+
 /** Runs a tool as an HTTP request through the router, so its middleware applies. */
 async function callTool(
-  fetchRoute: ReturnType<Router<RouterRoutes>['handler']>,
+  dispatch: Dispatch,
   target: ToolRoute,
   args: Record<string, unknown>,
   c: Context,
@@ -141,43 +164,55 @@ async function callTool(
   });
   const pathArgs = record(args.path);
   let missing: string | undefined;
+  let invalid: string | undefined;
   const path = target.path.replace(/\{(\w+)\}/g, (_, name: string) => {
     const value = pathArgs[name];
     if (value === undefined || value === null || value === '') missing ??= name;
+    // URL parsing resolves dot segments, which would reach a different route.
+    if (value === '.' || value === '..') invalid ??= name;
     return encodeURIComponent(String(value ?? ''));
   });
   if (missing) return fail(`Missing path parameter: ${missing}`);
+  if (invalid) return fail(`Invalid path parameter: ${invalid}`);
 
   const url = new URL(path, c.request.url);
   for (const [key, value] of Object.entries(record(args.query))) {
+    if (typeof value === 'object' && value !== null) return fail(`Invalid query parameter: ${key}`);
     if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
   }
 
   // Forward the caller's headers (Authorization, cookies, ...) but describe the new request.
   const headers = new Headers(c.request.headers);
-  for (const name of ['Content-Length', 'Content-Type', 'Mcp-Session-Id', 'Mcp-Protocol-Version']) {
-    headers.delete(name);
-  }
+  for (const name of DROPPED_HEADERS) headers.delete(name);
   headers.set('Accept', 'application/json');
   const hasBody = METHODS_WITH_BODY.includes(target.method);
   if (hasBody) headers.set('Content-Type', 'application/json');
 
-  const response = await fetchRoute(
-    new Request(url, {
-      method: target.method.toUpperCase(),
-      headers,
-      body: hasBody ? JSON.stringify(args.body ?? {}) : undefined,
-    }),
-    c.env,
-    c.executionCtx,
-  );
+  let response: Response;
+  try {
+    response = await dispatch(
+      new Request(url, {
+        method: target.method.toUpperCase(),
+        headers,
+        body: hasBody ? JSON.stringify(args.body ?? {}) : undefined,
+      }),
+      c,
+    );
+  } catch (error) {
+    console.error(`Error in MCP tool ${target.tool.name}:`, error);
+    return fail('Internal error');
+  }
+  if (STREAMING_TYPES.test(response.headers.get('Content-Type') ?? '')) {
+    await response.body?.cancel();
+    return fail('Streaming responses are not supported');
+  }
   return { content: [{ type: 'text', text: await response.text() }], isError: !response.ok };
 }
 
 /** Handles one MCP request with a fresh stateless server. */
 async function serve(
   tools: Map<string, ToolRoute>,
-  fetchRoute: ReturnType<Router<RouterRoutes>['handler']>,
+  dispatch: Dispatch,
   options: McpOptions,
   c: Context,
 ): Promise<Response> {
@@ -193,7 +228,7 @@ async function serve(
     if (!target) {
       throw new McpError(ErrorCode.InvalidParams, `Unknown tool: ${request.params.name}`);
     }
-    return callTool(fetchRoute, target, request.params.arguments ?? {}, c);
+    return callTool(dispatch, target, request.params.arguments ?? {}, c);
   });
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
@@ -243,8 +278,9 @@ function metadata(oauth: McpOAuthOptions) {
  * inputs from the route's path params and query/body schemas as `{ path, query, body }`.
  *
  * Middleware passed after `options` guards the endpoint itself; put auth there so unauthenticated
- * clients get an HTTP 401 (with an OAuth challenge when `oauth` is set). Route middleware still
- * runs on every tool call, with the caller's headers forwarded.
+ * clients get an HTTP 401 (with an OAuth challenge when `oauth` is set). Context it adds reaches
+ * handlers. Middleware on the given routers runs on every tool call, with the caller's headers
+ * forwarded; middleware on their parents elsewhere in the app does not.
  *
  * With `oauth`, metadata is served at `<endpoint>/.well-known/oauth-protected-resource` and
  * referenced from the 401 challenge. Mount {@link oauthProtectedResource} at the origin root as
@@ -259,15 +295,36 @@ export function mcp(
   options: McpOptions,
   ...middleware: Middleware[]
 ): Router<RouterRoutes> {
-  const root = isRouter(routes) ? routes : router(routes as RouterRoutes);
-  const tools = collectTools(root);
-  const fetchRoute = root.handler();
+  const base = isRouter(routes) ? routes : router(routes as RouterRoutes);
+  const tools = collectTools(base);
+
+  // Context set by middleware on the endpoint and its parents, keyed by dispatched request.
+  const inherited = new WeakMap<Request, Record<string, unknown>>();
+  const inherit: Middleware = (c, next) => {
+    Object.assign(c, inherited.get(c.request));
+    return next();
+  };
+  const fetchRoute = router(base.routes, inherit, ...(base.middleware ?? [])).handler();
+  const dispatch: Dispatch = (request, c) => {
+    inherited.set(
+      request,
+      Object.fromEntries(Object.entries(c).filter(([key]) => !CONTEXT_KEYS.has(key))),
+    );
+    return fetchRoute(request, c.env, c.executionCtx);
+  };
+
   const chain = options.oauth ? [challenge(options.oauth), ...middleware] : middleware;
   const notAllowed = () => new Response(null, { status: 405, headers: { Allow: 'POST' } });
 
   return router({
-    post: (c) =>
-      runMiddleware(chain, c as MiddlewareContext, () => serve(tools, fetchRoute, options, c)),
+    post: (c) => {
+      // The MCP spec requires Origin validation against DNS rebinding.
+      const origin = c.request.headers.get('Origin');
+      if (origin && origin !== new URL(c.request.url).origin) {
+        return new Response('Forbidden origin', { status: 403 });
+      }
+      return runMiddleware(chain, c as MiddlewareContext, () => serve(tools, dispatch, options, c));
+    },
     get: notAllowed,
     delete: notAllowed,
     ...(options.oauth && {

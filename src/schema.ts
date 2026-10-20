@@ -344,7 +344,8 @@ export function compileSchema<T extends SchemaDefinition>(
 export interface JsonSchemaObject {
   type: 'object';
   properties: Record<string, unknown>;
-  required: string[];
+  /** Omitted when empty, as OpenAPI 3.0 requires. */
+  required?: string[];
 }
 
 /** Converts a schema definition to JSON Schema, recursing into nested objects. */
@@ -364,5 +365,5 @@ export function toJsonSchema(schema: SchemaDefinition): JsonSchemaObject {
     properties[key] = base.endsWith('[]') ? { type: 'array', items: item } : item;
     if (!optional) required.push(key);
   }
-  return { type: 'object', properties, required };
+  return { type: 'object', properties, ...(required.length > 0 && { required }) };
 }

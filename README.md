@@ -401,7 +401,8 @@ const api = router({
 ```
 
 - **Tools** — one per route: `get_users`, `post_users`, `get_users_by_id`, ... Descriptions come from `route.description`; inputs are `{ path, query, body }` as JSON Schema derived from the route's schemas.
-- **Calls** — each tool call is dispatched as an HTTP request through the router with the caller's headers forwarded, so route middleware (auth, rate limits) applies. Responses become text content; status 400 and above sets `isError`.
+- **Calls** — each tool call is dispatched as an HTTP request through the given routers with the caller's headers forwarded. Middleware on the MCP endpoint (passed to `mcp()` or on its parent routers) runs once per MCP request, and what it adds to the context (e.g. `c.user`) reaches handlers; middleware on the given routers and below runs on every call. Middleware on the given routers' *own* parents elsewhere in your app does **not** run, so guard the endpoint or the routers themselves. Responses become text content; a non-2xx status sets `isError`, and streaming (SSE, NDJSON) responses are rejected.
+- **Safety** — cross-origin requests get 403, path parameters can't be `.` or `..`, and handler exceptions become a generic `Internal error`.
 - **Transport** — stateless Streamable HTTP with JSON responses; `GET` and `DELETE` return 405.
 - Pass a router to expose all of its routes, or a record of routers to mount them under their keys.
 
@@ -420,7 +421,7 @@ const app = router({
 });
 ```
 
-401s from the endpoint gain `WWW-Authenticate: Bearer resource_metadata="https://host/mcp/.well-known/oauth-protected-resource"`, and that URL serves the metadata without authentication. Validate that tokens were issued for this server (the `aud` claim), not just by your authorization server.
+401s from the endpoint gain `WWW-Authenticate: Bearer resource_metadata="https://host/mcp/.well-known/oauth-protected-resource"`, and that URL serves the metadata without the endpoint's middleware (keep auth off the endpoint's parent routers, or the metadata is guarded too). `oauthProtectedResource` only handles single-segment endpoint paths such as `/mcp`. Validate that tokens were issued for this server (the `aud` claim), not just by your authorization server.
 
 ## Streaming
 

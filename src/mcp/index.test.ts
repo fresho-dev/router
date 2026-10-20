@@ -78,9 +78,8 @@ describe('mcp', () => {
     assert.deepStrictEqual(tools[0].inputSchema, {
       type: 'object',
       properties: {
-        query: { type: 'object', properties: { limit: { type: 'number' } }, required: [] },
+        query: { type: 'object', properties: { limit: { type: 'number' } } },
       },
-      required: [],
     });
     assert.deepStrictEqual(tools[1].inputSchema, {
       type: 'object',
@@ -245,6 +244,139 @@ describe('mcp', () => {
         authorization_servers: ['https://auth.example.com'],
         bearer_methods_supported: ['header'],
       });
+    });
+  });
+
+  describe('hardening', () => {
+    const uid = (c: unknown) => (c as { uid?: string }).uid ?? null;
+    const profile = router({ get: async (c) => ({ uid: uid(c) }) });
+    const inner = router({
+      boom: router({
+        get: async () => {
+          throw new Error('db password=hunter2');
+        },
+      }),
+      events: router({
+        get: () =>
+          new Response(new ReadableStream({ start() {} }), {
+            headers: { 'Content-Type': 'text/event-stream' },
+          }),
+      }),
+      headers: router({ get: async (c) => Object.fromEntries(c.request.headers) }),
+      search: router({
+        get: route({ query: { q: 'string?' }, handler: async (c) => ({ q: c.query.q }) }),
+      }),
+      sessions: router({ delete: async () => ({ deleted: 'all' }) }),
+      $id: router({ sessions: router({ delete: async (c) => ({ deleted: c.path.id }) }) }),
+    });
+    const opts = { name: 'test', version: '1.0.0' };
+    const hardened = router({
+      endpoint: router({ mcp: mcp({ profile }, opts, auth) }),
+      parent: router({ mcp: mcp({ profile }, opts) }, auth),
+      mcp: mcp({ inner }, opts),
+    });
+    const fetchHardened = hardened.handler();
+
+    async function call(path: string, name: string, args: object, headers: object = {}) {
+      const client = new Client({ name: 'test-client', version: '1.0.0' });
+      const transport = new StreamableHTTPClientTransport(new URL(`http://localhost${path}`), {
+        fetch: async (url, init) => fetchHardened(new Request(url, init)),
+        requestInit: { headers: { Authorization: 'Bearer good', ...headers } },
+      });
+      await client.connect(transport);
+      return client.callTool({ name, arguments: args as Record<string, unknown> });
+    }
+
+    it('passes endpoint and parent middleware context to handlers', async () => {
+      for (const path of ['/endpoint/mcp', '/parent/mcp']) {
+        const result = await call(path, 'get_profile', {});
+        assert.deepStrictEqual(JSON.parse(text(result)), { uid: 'u1' });
+      }
+    });
+
+    it('rejects dot segments in path parameters', async () => {
+      for (const id of ['.', '..']) {
+        const result = await call('/mcp', 'delete_inner_by_id_sessions', { path: { id } });
+        assert.strictEqual(result.isError, true);
+        assert.match(text(result), /Invalid path parameter: id/);
+      }
+    });
+
+    it('hides handler exceptions behind a tool error', async () => {
+      const errors: unknown[] = [];
+      const original = console.error;
+      console.error = (...args: unknown[]) => errors.push(args);
+      try {
+        const result = await call('/mcp', 'get_inner_boom', {});
+        assert.strictEqual(result.isError, true);
+        assert.strictEqual(text(result), 'Internal error');
+        assert.strictEqual(errors.length, 1);
+      } finally {
+        console.error = original;
+      }
+    });
+
+    it('rejects streaming responses instead of hanging', async () => {
+      const result = await call('/mcp', 'get_inner_events', {});
+      assert.strictEqual(result.isError, true);
+      assert.match(text(result), /Streaming responses are not supported/);
+    });
+
+    it('rejects non-scalar query arguments', async () => {
+      const result = await call('/mcp', 'get_inner_search', { query: { q: { a: 1 } } });
+      assert.strictEqual(result.isError, true);
+      assert.match(text(result), /Invalid query parameter: q/);
+    });
+
+    it('does not forward hop-by-hop or encoding headers', async () => {
+      const result = await call(
+        '/mcp',
+        'get_inner_headers',
+        {},
+        { 'X-Custom': 'yes', 'Keep-Alive': 'timeout=5', 'Content-Encoding': 'identity' },
+      );
+      const headers = JSON.parse(text(result));
+      assert.strictEqual(headers['x-custom'], 'yes');
+      assert.strictEqual(headers.authorization, 'Bearer good');
+      assert.strictEqual(headers['keep-alive'], undefined);
+      assert.strictEqual(headers['content-encoding'], undefined);
+    });
+
+    it('rejects cross-origin requests', async () => {
+      const ping = (origin: string) =>
+        fetchHardened(
+          new Request('http://localhost/mcp', {
+            method: 'POST',
+            headers: {
+              Origin: origin,
+              'Content-Type': 'application/json',
+              Accept: 'application/json, text/event-stream',
+            },
+            body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }),
+          }),
+        );
+      assert.strictEqual((await ping('http://evil.example')).status, 403);
+      assert.strictEqual((await ping('http://localhost')).status, 200);
+    });
+
+    it('builds names clients accept', async () => {
+      const handler = async () => ({});
+      const app = router({ mcp: mcp({ v: router({ 'v1.0': router({ get: handler }) }) }, opts) });
+      const client = new Client({ name: 'test-client', version: '1.0.0' });
+      const fetchNamed = app.handler();
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL('http://localhost/mcp'), {
+          fetch: async (url, init) => fetchNamed(new Request(url, init)),
+        }),
+      );
+      assert.deepStrictEqual(
+        (await client.listTools()).tools.map((t) => t.name),
+        ['get_v_v1_0'],
+      );
+      assert.throws(
+        () => mcp({ ['x'.repeat(130)]: router({ get: handler }) }, opts),
+        /Tool name too long/,
+      );
     });
   });
 });
