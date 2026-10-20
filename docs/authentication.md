@@ -291,7 +291,7 @@ refresh: router({
 
 ## MCP Endpoints
 
-To let agents call your API through [`@fresho/router/mcp`](../README.md#mcp-server) with tokens from a third-party OAuth provider, verify them with the provider's JWKS on the MCP endpoint. An unauthenticated call then gets an HTTP 401 whose `WWW-Authenticate` header points the client at your authorization server. `createJwks` and `clockTolerance` are added in #14.
+To let agents call your API through [`@fresho/router/mcp`](../README.md#mcp-server) with tokens from a third-party OAuth provider, verify them with the provider's JWKS on the MCP endpoint. An unauthenticated call then gets an HTTP 401 whose `WWW-Authenticate` header points the client at your authorization server.
 
 ```typescript
 import { router } from '@fresho/router';
