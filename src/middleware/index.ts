@@ -37,13 +37,14 @@ export { compose } from '../middleware.js';
 export type {
   BasicAuthOptions,
   BearerAuthOptions,
+  Jwks,
   JwtAlgorithm,
   JwtAuthOptions,
   JwtPayload,
   SignJwtOptions,
   VerifyJwtOptions,
 } from './auth.js';
-export { basicAuth, bearerAuth, jwtAuth, jwtSign, jwtVerify } from './auth.js';
+export { basicAuth, bearerAuth, createJwks, jwtAuth, jwtSign, jwtVerify } from './auth.js';
 // Common middleware utilities
 export type {
   ContentTypeOptions,
