@@ -285,6 +285,17 @@ describe('Authentication Middleware', () => {
       assert.strictEqual(nextCalled, false);
     });
 
+    it('should not echo token or upstream content in WWW-Authenticate', async () => {
+      const middleware = jwtAuth({ secret: 'test-secret', claims: defaultClaims });
+      const header = btoa(JSON.stringify({ alg: 'x", error="insufficient_scope' }));
+      context.request = new Request('http://example.com/test', {
+        headers: { Authorization: `Bearer ${header.replace(/=+$/, '')}.e30.c2ln` },
+      });
+      const response = await middleware(context, next);
+      assert.strictEqual(response.status, 401);
+      assert.strictEqual(response.headers.get('WWW-Authenticate'), 'Bearer error="invalid_token"');
+    });
+
     it('should reject expired tokens', async () => {
       const middleware = jwtAuth({
         secret: 'test-secret',

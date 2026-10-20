@@ -61,7 +61,7 @@ export type JwtAlgorithm =
  * JWT secret value: an HMAC secret, a CryptoKey (HMAC, or RSA/EC public or private key),
  * or a remote key set from {@link createJwks}.
  */
-export type JwtSecret = string | ArrayBuffer | CryptoKey | Jwks;
+export type JwtSecret = string | BufferSource | CryptoKey | Jwks;
 
 /** Options for signing a JWT. */
 export interface SignJwtOptions {
@@ -160,6 +160,8 @@ async function resolveKey(
 
 /** Decodes a base64url string to bytes. */
 function base64urlDecode(data: string): Uint8Array<ArrayBuffer> {
+  // Strict alphabet so each token has one encoding; atob alone tolerates padding and whitespace.
+  if (!/^[A-Za-z0-9_-]*$/.test(data)) throw new Error('Invalid JWT format');
   return Uint8Array.from(atob(data.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
 }
 
@@ -230,7 +232,7 @@ function base64urlEncode(data: string | Uint8Array): string {
  * Uses only Web Crypto API, compatible with Cloudflare Workers, Deno, and browsers.
  *
  * @param payload - The JWT payload (custom claims)
- * @param secret - The signing secret (string, ArrayBuffer, or CryptoKey)
+ * @param secret - The signing secret (string, bytes, or private/HMAC CryptoKey)
  * @param options - Optional signing options (algorithm, expiresIn, issuer, etc.)
  * @returns The signed JWT token string
  *
@@ -319,7 +321,7 @@ export async function jwtSign(
  * Uses only Web Crypto API, compatible with Cloudflare Workers, Deno, and browsers.
  *
  * @param token - The JWT token string to verify
- * @param secret - The secret used to sign the token (string, ArrayBuffer, or CryptoKey)
+ * @param secret - The verification key (string, bytes, CryptoKey, or JWKS)
  * @param options - Optional verification options
  * @returns The decoded JWT payload
  * @throws Error if the token is invalid, expired, or not yet valid
@@ -345,9 +347,7 @@ export async function jwtVerify(
   options: VerifyJwtOptions = {},
 ): Promise<JwtPayload> {
   const symmetric =
-    typeof secret === 'string' ||
-    secret instanceof ArrayBuffer ||
-    (secret instanceof CryptoKey && secret.algorithm.name === 'HMAC');
+    !(secret instanceof Jwks) && !(secret instanceof CryptoKey && secret.algorithm.name !== 'HMAC');
   const algorithms = options.algorithms || [symmetric ? 'HS256' : 'RS256'];
 
   const parts = token.split('.');
@@ -363,7 +363,14 @@ export async function jwtVerify(
     throw new Error(`Unsupported algorithm: ${header.alg}`);
   }
   const alg = header.alg as JwtAlgorithm;
-  const kid = typeof header.kid === 'string' ? header.kid : undefined;
+  if (header.kid !== undefined && typeof header.kid !== 'string') {
+    throw new Error('Invalid JWT format');
+  }
+  // No extensions are supported, so any critical one must be rejected (RFC 7515 §4.1.11).
+  if (header.crit !== undefined) {
+    throw new Error('Unsupported critical header');
+  }
+  const kid: string | undefined = header.kid;
 
   const key = await resolveKey(secret, alg, kid, 'verify');
   const data = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
@@ -380,17 +387,18 @@ export async function jwtVerify(
 
   const payload = decodeSegment(payloadB64);
 
-  // Check expiration.
-  if (payload.exp && payload.exp < Date.now() / 1000) {
+  const now = Date.now() / 1000;
+  if (payload.exp !== undefined && !(typeof payload.exp === 'number' && payload.exp >= now)) {
     throw new Error('Token expired');
   }
-
-  // Check not before.
-  if (payload.nbf && payload.nbf > Date.now() / 1000) {
+  if (payload.nbf !== undefined && !(typeof payload.nbf === 'number' && payload.nbf <= now)) {
     throw new Error('Token not yet valid');
   }
 
-  if (options.issuer !== undefined && !claimMatches(payload.iss, options.issuer)) {
+  if (
+    options.issuer !== undefined &&
+    (typeof payload.iss !== 'string' || !claimMatches(payload.iss, options.issuer))
+  ) {
     throw new Error('Invalid issuer');
   }
 
@@ -408,26 +416,27 @@ export async function jwtVerify(
 /** How long fetched keys are trusted before the set is reloaded. */
 const JWKS_MAX_AGE_MS = 10 * 60 * 1000;
 
-/** Minimum time between reloads triggered by an unknown `kid`. */
+/** Minimum time between fetch attempts, successful or not. */
 const JWKS_COOLDOWN_MS = 30 * 1000;
+
+/** Abort a JWKS fetch that takes longer than this. */
+const JWKS_TIMEOUT_MS = 5 * 1000;
 
 /** A remote JSON Web Key Set, fetched lazily and cached. Create with {@link createJwks}. */
 export class Jwks {
   private keys: (JsonWebKey & { kid?: string })[] = [];
-  private fetchedAt = 0;
-  private refetchedAt = Number.NEGATIVE_INFINITY;
+  private fetchedAt = Number.NEGATIVE_INFINITY;
+  private attemptedAt = Number.NEGATIVE_INFINITY;
   private pending?: Promise<void>;
 
   constructor(readonly url: string) {}
 
-  /** Returns the verification key for `alg` and `kid`, reloading the set at most once per cooldown. */
+  /** Returns the verification key for `alg` and `kid`, reloading when stale or the kid is unknown. */
   async getKey(alg: JwtAlgorithm, kid: string | undefined): Promise<CryptoKey> {
-    const stale = Date.now() - this.fetchedAt > JWKS_MAX_AGE_MS;
-    if (stale) await this.load();
+    if (Date.now() - this.fetchedAt > JWKS_MAX_AGE_MS) await this.refresh();
     let candidates = this.match(alg, kid);
-    if (!stale && candidates.length === 0 && Date.now() - this.refetchedAt > JWKS_COOLDOWN_MS) {
-      this.refetchedAt = Date.now();
-      await this.load();
+    if (candidates.length === 0) {
+      await this.refresh();
       candidates = this.match(alg, kid);
     }
     // Without a kid the choice must be unambiguous.
@@ -439,20 +448,35 @@ export class Jwks {
     return this.keys.filter((k) => (kid === undefined || k.kid === kid) && jwkMatches(k, alg));
   }
 
-  private load(): Promise<void> {
-    this.pending ??= (async () => {
-      try {
-        const response = await fetch(this.url, { headers: { Accept: 'application/json' } });
-        if (!response.ok) throw new Error(`JWKS fetch failed: ${response.status}`);
-        const body = (await response.json()) as { keys?: unknown };
-        if (!Array.isArray(body.keys)) throw new Error('JWKS response has no keys');
-        this.keys = body.keys.filter((k) => typeof k === 'object' && k !== null);
-        this.fetchedAt = Date.now();
-      } finally {
+  /** Joins an in-flight load or starts one at most once per cooldown; keeps old keys on failure. */
+  private async refresh(): Promise<void> {
+    if (!this.pending) {
+      if (Date.now() - this.attemptedAt < JWKS_COOLDOWN_MS) return;
+      this.attemptedAt = Date.now();
+      this.pending = this.load().finally(() => {
         this.pending = undefined;
-      }
-    })();
-    return this.pending;
+      });
+    }
+    try {
+      await this.pending;
+    } catch (error) {
+      if (this.keys.length === 0) throw error;
+    }
+  }
+
+  private async load(): Promise<void> {
+    const response = await fetch(this.url, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(JWKS_TIMEOUT_MS),
+    });
+    if (!response.ok) throw new Error(`JWKS fetch failed: ${response.status}`);
+    const body = (await response.json().catch(() => ({}))) as { keys?: unknown };
+    const keys = Array.isArray(body.keys)
+      ? body.keys.filter((k) => typeof k === 'object' && k !== null)
+      : [];
+    if (keys.length === 0) throw new Error('JWKS response has no keys');
+    this.keys = keys;
+    this.fetchedAt = Date.now();
   }
 }
 

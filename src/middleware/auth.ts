@@ -196,7 +196,8 @@ export function jwtAuth<Ctx = {}>(options: JwtAuthOptions<Ctx>): Middleware<Ctx>
       return new Response(message, {
         status: 401,
         headers: {
-          'WWW-Authenticate': `Bearer error="invalid_token", error_description="${message}"`,
+          // Fixed value: messages can carry token or JWKS content, unsafe in a header.
+          'WWW-Authenticate': 'Bearer error="invalid_token"',
         },
       });
     }

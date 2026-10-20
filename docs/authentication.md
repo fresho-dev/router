@@ -355,7 +355,7 @@ const payload = await jwtVerify(token, secret, { algorithms: ['HS512'] });
 | `issuer` | `string \| string[]` | Required `iss`; any listed value is accepted |
 | `audience` | `string \| string[]` | Required `aud`; the token must contain at least one listed value |
 
-**Supported algorithms:** `HS256`, `HS384`, `HS512` (string, `ArrayBuffer` or HMAC `CryptoKey`), and `RS256/384/512`, `PS256/384/512`, `ES256/384` (public `CryptoKey` or JWKS). A key is only used for the algorithm it was created for, so an `HS256` token can never be checked against a public key.
+**Supported algorithms:** `HS256`, `HS384`, `HS512` (string, `ArrayBuffer`/`Uint8Array` or HMAC `CryptoKey`), and `RS256/384/512`, `PS256/384/512`, `ES256/384` (public `CryptoKey` or JWKS). A key is only used for the algorithm it was created for, so an `HS256` token can never be checked against a public key.
 
 **Throws:**
 - `'Invalid JWT format'` - Token doesn't have 3 parts or a segment isn't a JSON object
@@ -384,7 +384,8 @@ const payload = await jwtVerify(token, jwks, {
 ```
 
 - Keys are picked by the token's `kid` and must match its algorithm (`kty`, `crv`, and `alg`/`use` when present). A token without `kid` is accepted only if exactly one key fits.
-- Keys are cached for 10 minutes. An unknown `kid` triggers an immediate reload, at most once every 30 seconds, so key rotation is picked up without letting random `kid`s hammer the provider.
+- Keys are cached for 10 minutes. An unknown `kid` triggers a reload, so key rotation is picked up. The provider is fetched at most once every 30 seconds (with a 5 second timeout), whether fetches succeed or fail, so random `kid`s or an outage can't hammer it. Concurrent requests share one fetch.
+- If a reload fails or returns no keys, the previously fetched keys stay in use.
 - Always set `issuer` and `audience` for third-party tokens; otherwise any token the provider signs for another application is accepted.
 
 ### jwtAuth

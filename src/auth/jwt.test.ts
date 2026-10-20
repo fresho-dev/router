@@ -243,6 +243,12 @@ describe('JWT Utilities', () => {
 
       assert.strictEqual(payload.uid, 'user-123');
     });
+
+    it('should default to HS256 for Uint8Array secrets', async () => {
+      const bytes = new TextEncoder().encode('buffer-secret');
+      const token = await jwtSign({ uid: 'user-123' }, bytes);
+      assert.strictEqual((await jwtVerify(token, bytes)).uid, 'user-123');
+    });
   });
 
   describe('jwtSign + jwtVerify roundtrip', () => {
@@ -303,6 +309,14 @@ describe('Asymmetric JWT', () => {
       return Response.json({ keys: keys() });
     }) as typeof fetch;
     return { calls, restore: () => (globalThis.fetch = original) };
+  }
+
+  // Freezes Date.now so tests can step past the JWKS cooldown and max age.
+  function fakeClock() {
+    const real = Date.now;
+    let now = real();
+    Date.now = () => now;
+    return { advance: (ms: number) => (now += ms), restore: () => (Date.now = real) };
   }
 
   describe('with CryptoKey', () => {
@@ -377,6 +391,57 @@ describe('Asymmetric JWT', () => {
         () => jwtVerify(token, pair.publicKey, { algorithms: ['RS256'] }),
         /Unsupported algorithm/,
       );
+      await assert.rejects(
+        () => jwtVerify(token, pair.publicKey, { algorithms: ['none' as JwtAlgorithm] }),
+        /Unsupported algorithm/,
+      );
+    });
+
+    it('should reject a key whose hash does not match the algorithm', async () => {
+      const pair = await rsa('RSASSA-PKCS1-v1_5');
+      const header = b64url(JSON.stringify({ alg: 'RS512' }));
+      const token = `${header}.${b64url('{}')}.${b64url('sig')}`;
+      await assert.rejects(
+        () => jwtVerify(token, pair.publicKey, { algorithms: ['RS512'] }),
+        /Key does not match/,
+      );
+    });
+
+    it('should reject tokens with crit or a non-string kid', async () => {
+      const pair = await ec();
+      const sign = async (header: object) => {
+        const data = `${b64url(JSON.stringify({ alg: 'ES256', ...header }))}.${b64url('{}')}`;
+        const sig = await crypto.subtle.sign(
+          { name: 'ECDSA', hash: 'SHA-256' },
+          pair.privateKey,
+          new TextEncoder().encode(data),
+        );
+        return `${data}.${b64url(new Uint8Array(sig))}`;
+      };
+      const opts = { algorithms: ['ES256'] as JwtAlgorithm[] };
+      assert.deepStrictEqual(await jwtVerify(await sign({}), pair.publicKey, opts), {});
+      await assert.rejects(
+        async () => jwtVerify(await sign({ crit: ['b64'], b64: false }), pair.publicKey, opts),
+        /Unsupported critical header/,
+      );
+      await assert.rejects(
+        async () => jwtVerify(await sign({ kid: 42 }), pair.publicKey, opts),
+        /Invalid JWT format/,
+      );
+    });
+
+    it('should reject non-canonical base64url segments', async () => {
+      const token = await jwtSign({ uid: 'u1' }, 'secret');
+      for (const bad of [`${token}=`, `${token} `, `${token.slice(0, -1)}+`]) {
+        await assert.rejects(() => jwtVerify(bad, 'secret'), /Invalid JWT format/);
+      }
+    });
+
+    it('should reject non-numeric exp and nbf', async () => {
+      for (const claims of [{ exp: 0 }, { exp: 'soon' }, { exp: null }, { nbf: 'later' }]) {
+        const token = await jwtSign(claims, 'secret');
+        await assert.rejects(() => jwtVerify(token, 'secret'), /Token (expired|not yet valid)/);
+      }
     });
   });
 
@@ -404,6 +469,14 @@ describe('Asymmetric JWT', () => {
       await assert.rejects(
         () => jwtVerify(missing, secret, { audience: ['api', 'web'] }),
         /Invalid audience/,
+      );
+    });
+
+    it('should reject a non-string issuer', async () => {
+      const token = await jwtSign({ iss: ['https://idp'] }, secret);
+      await assert.rejects(
+        () => jwtVerify(token, secret, { issuer: 'https://idp' }),
+        /Invalid issuer/,
       );
     });
 
@@ -440,11 +513,13 @@ describe('Asymmetric JWT', () => {
       const [old, rotated] = await Promise.all([ec(), ec()]);
       let keys = [await jwk(old, 'old')];
       const server = serveJwks(() => keys);
+      const clock = fakeClock();
       try {
         const jwks = createJwks(url);
         const opts = { algorithms: ['ES256'] as JwtAlgorithm[] };
         const t1 = await jwtSign({}, old.privateKey, { algorithm: 'ES256', keyId: 'old' });
         await jwtVerify(t1, jwks, opts);
+        clock.advance(31 * 1000);
         keys = [await jwk(rotated, 'new')];
         const t2 = await jwtSign({ uid: 'n' }, rotated.privateKey, {
           algorithm: 'ES256',
@@ -454,6 +529,7 @@ describe('Asymmetric JWT', () => {
         assert.strictEqual(server.calls.length, 2);
       } finally {
         server.restore();
+        clock.restore();
       }
     });
 
@@ -464,11 +540,12 @@ describe('Asymmetric JWT', () => {
       try {
         const jwks = createJwks(url);
         const opts = { algorithms: ['ES256'] as JwtAlgorithm[] };
+        // The first fetch starts the cooldown, so unknown kids right after it fetch nothing more.
         for (const kid of ['x', 'y', 'z']) {
           const token = await jwtSign({}, pair.privateKey, { algorithm: 'ES256', keyId: kid });
           await assert.rejects(() => jwtVerify(token, jwks, opts), /No matching key/);
         }
-        assert.strictEqual(server.calls.length, 2);
+        assert.strictEqual(server.calls.length, 1);
       } finally {
         server.restore();
       }
@@ -552,6 +629,122 @@ describe('Asymmetric JWT', () => {
         );
       } finally {
         globalThis.fetch = original;
+      }
+    });
+    it('should reject keys not meant for signing or on another curve', async () => {
+      const pair = await ec();
+      const p384 = (await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-384' }, true, [
+        'sign',
+        'verify',
+      ])) as CryptoKeyPair;
+      const keys = [{ ...(await jwk(pair, 'enc')), use: 'enc' }, await jwk(p384, 'p384')];
+      const server = serveJwks(() => keys);
+      try {
+        const jwks = createJwks(url);
+        const opts = { algorithms: ['ES256'] as JwtAlgorithm[] };
+        for (const keyId of ['enc', 'p384']) {
+          const token = await jwtSign({}, pair.privateKey, { algorithm: 'ES256', keyId });
+          await assert.rejects(() => jwtVerify(token, jwks, opts), /No matching key/);
+        }
+      } finally {
+        server.restore();
+      }
+    });
+
+    it('should reject a token without kid when several keys match', async () => {
+      const [a, b] = await Promise.all([ec(), ec()]);
+      const keys = [await jwk(a, 'a'), await jwk(b, 'b')];
+      const server = serveJwks(() => keys);
+      try {
+        const token = await jwtSign({}, a.privateKey, { algorithm: 'ES256' });
+        await assert.rejects(
+          () => jwtVerify(token, createJwks(url), { algorithms: ['ES256'] }),
+          /No matching key/,
+        );
+      } finally {
+        server.restore();
+      }
+    });
+
+    it('should share one fetch between concurrent requests', async () => {
+      const pair = await ec();
+      let keys = [await jwk(pair, 'a')];
+      const server = serveJwks(() => keys);
+      const clock = fakeClock();
+      try {
+        const jwks = createJwks(url);
+        const opts = { algorithms: ['ES256'] as JwtAlgorithm[] };
+        const sign = (keyId: string) =>
+          jwtSign({ uid: keyId }, pair.privateKey, { algorithm: 'ES256', keyId });
+        const ta = await sign('a');
+        await Promise.all(Array.from({ length: 5 }, () => jwtVerify(ta, jwks, opts)));
+        assert.strictEqual(server.calls.length, 1);
+        // Rotation: every concurrent request for the new kid waits for the same reload.
+        clock.advance(31 * 1000);
+        keys = [await jwk(pair, 'b')];
+        const tb = await sign('b');
+        const results = await Promise.all(
+          Array.from({ length: 5 }, () => jwtVerify(tb, jwks, opts)),
+        );
+        assert.deepStrictEqual(
+          results.map((p) => p.uid),
+          Array(5).fill('b'),
+        );
+        assert.strictEqual(server.calls.length, 2);
+      } finally {
+        server.restore();
+        clock.restore();
+      }
+    });
+
+    it('should rate-limit fetches while the endpoint fails', async () => {
+      const original = globalThis.fetch;
+      let calls = 0;
+      globalThis.fetch = (async () => {
+        calls++;
+        return new Response('nope', { status: 503 });
+      }) as typeof fetch;
+      try {
+        const pair = await ec();
+        const jwks = createJwks(url);
+        const token = await jwtSign({}, pair.privateKey, { algorithm: 'ES256', keyId: 'k' });
+        for (let i = 0; i < 5; i++) {
+          await assert.rejects(() => jwtVerify(token, jwks, { algorithms: ['ES256'] }));
+        }
+        assert.strictEqual(calls, 1);
+      } finally {
+        globalThis.fetch = original;
+      }
+    });
+
+    it('should keep serving cached keys when a refresh fails or is empty', async () => {
+      const pair = await ec();
+      const good = [await jwk(pair, 'k')];
+      let response = () => Response.json({ keys: good });
+      const original = globalThis.fetch;
+      globalThis.fetch = (async () => response()) as typeof fetch;
+      const clock = fakeClock();
+      try {
+        const jwks = createJwks(url);
+        const token = await jwtSign({ uid: 'u' }, pair.privateKey, {
+          algorithm: 'ES256',
+          keyId: 'k',
+          expiresIn: '1d',
+        });
+        const opts = { algorithms: ['ES256'] as JwtAlgorithm[] };
+        await jwtVerify(token, jwks, opts);
+        for (const next of [
+          () => new Response('<html>', { status: 200 }),
+          () => new Response('down', { status: 500 }),
+          () => Response.json({ keys: [] }),
+        ]) {
+          response = next;
+          clock.advance(11 * 60 * 1000);
+          assert.strictEqual((await jwtVerify(token, jwks, opts)).uid, 'u');
+        }
+      } finally {
+        globalThis.fetch = original;
+        clock.restore();
       }
     });
   });
