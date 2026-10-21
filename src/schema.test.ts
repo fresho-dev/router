@@ -274,16 +274,23 @@ describe('schema', () => {
       assert.strictEqual(result.success, false);
     });
 
-    it('rejects null or empty elements in string and number arrays', () => {
+    it('rejects null or non-primitive elements in arrays', () => {
       const strings = compileSchema({ tags: 'string[]' });
       assert.strictEqual(strings.safeParse({ tags: ['a', null] }).success, false);
       assert.strictEqual(strings.safeParse({ tags: ['a', undefined] }).success, false);
+      assert.strictEqual(strings.safeParse({ tags: ['a', false] }).success, false);
+      assert.strictEqual(strings.safeParse({ tags: ['a', {}] }).success, false);
 
       const numbers = compileSchema({ scores: 'number[]' });
       assert.strictEqual(numbers.safeParse({ scores: [1, null] }).success, false);
       assert.strictEqual(numbers.safeParse({ scores: [1, undefined] }).success, false);
       assert.strictEqual(numbers.safeParse({ scores: [1, ''] }).success, false);
+      assert.strictEqual(numbers.safeParse({ scores: [1, '   '] }).success, false);
       assert.strictEqual(numbers.safeParse({ scores: [1, false] }).success, false);
+      assert.strictEqual(
+        numbers.safeParse({ scores: [1, Number.POSITIVE_INFINITY] }).success,
+        false,
+      );
     });
 
     it('compiles optional array type', () => {

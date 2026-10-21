@@ -137,10 +137,10 @@ function isNestedSchema(field: SchemaType | SchemaDefinition): field is SchemaDe
 function validatePrimitive(value: unknown, baseType: string): [boolean, unknown, string | null] {
   switch (baseType) {
     case 'string':
-      if (value === null || value === undefined || typeof value === 'object') {
+      if (typeof value !== 'string') {
         return [false, undefined, 'Expected string'];
       }
-      return [true, String(value), null];
+      return [true, value, null];
 
     case 'number': {
       if (
@@ -150,7 +150,7 @@ function validatePrimitive(value: unknown, baseType: string): [boolean, unknown,
         return [false, undefined, 'Expected number'];
       }
       const num = Number(value);
-      if (Number.isNaN(num)) {
+      if (!Number.isFinite(num)) {
         return [false, undefined, 'Expected number'];
       }
       return [true, num, null];
@@ -262,7 +262,7 @@ function validateSchema(
   const source = typeof data === 'object' && data !== null && !Array.isArray(data) ? data : {};
 
   for (const [key, field] of Object.entries(schema)) {
-    const value = source[key];
+    const value = Object.hasOwn(source, key) ? source[key] : undefined;
     const [success, coerced, fieldErrors] = validateField(key, field, value, parentPath);
 
     if (!success) {
