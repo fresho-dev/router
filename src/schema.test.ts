@@ -106,6 +106,67 @@ describe('schema', () => {
       assert.strictEqual(result.success, false);
     });
 
+    it('treats null as missing for optional fields', () => {
+      const schema = compileSchema({
+        name: 'string?',
+        count: 'number?',
+        active: 'boolean?',
+        tags: 'string[]?',
+        extra: 'unknown?',
+      });
+      const result = schema.safeParse({
+        name: null,
+        count: null,
+        active: null,
+        tags: null,
+        extra: null,
+      });
+      assert.strictEqual(result.success, true);
+      if (result.success) {
+        assert.deepStrictEqual(result.data, {});
+      }
+    });
+
+    it('fails with Required when null is passed for required fields', () => {
+      const schema = compileSchema({
+        name: 'string',
+        count: 'number',
+        active: 'boolean',
+        tags: 'string[]',
+        extra: 'unknown',
+      });
+      const result = schema.safeParse({
+        name: null,
+        count: null,
+        active: null,
+        tags: null,
+        extra: null,
+      });
+      assert.strictEqual(result.success, false);
+      if (!result.success) {
+        assert.deepStrictEqual(result.error.flatten().fieldErrors, {
+          name: ['Required'],
+          count: ['Required'],
+          active: ['Required'],
+          tags: ['Required'],
+          extra: ['Required'],
+        });
+      }
+    });
+
+    it('handles null root data without throwing', () => {
+      const required = compileSchema({ name: 'string' });
+      const reqResult = required.safeParse(null as unknown as object);
+      assert.strictEqual(reqResult.success, false);
+
+      const optional = compileSchema({ name: 'string?' });
+      const optResult = optional.safeParse(null as unknown as object);
+      assert.strictEqual(optResult.success, true);
+      if (optResult.success) {
+        assert.deepStrictEqual(optResult.data, {});
+      }
+    });
+
     it('fails for invalid number', () => {
       const schema = compileSchema({ count: 'number' });
       const result = schema.safeParse({ count: 'not-a-number' });
@@ -211,6 +272,18 @@ describe('schema', () => {
       const schema = compileSchema({ scores: 'number[]' });
       const result = schema.safeParse({ scores: [1, 'not-a-number', 3] });
       assert.strictEqual(result.success, false);
+    });
+
+    it('rejects null or empty elements in string and number arrays', () => {
+      const strings = compileSchema({ tags: 'string[]' });
+      assert.strictEqual(strings.safeParse({ tags: ['a', null] }).success, false);
+      assert.strictEqual(strings.safeParse({ tags: ['a', undefined] }).success, false);
+
+      const numbers = compileSchema({ scores: 'number[]' });
+      assert.strictEqual(numbers.safeParse({ scores: [1, null] }).success, false);
+      assert.strictEqual(numbers.safeParse({ scores: [1, undefined] }).success, false);
+      assert.strictEqual(numbers.safeParse({ scores: [1, ''] }).success, false);
+      assert.strictEqual(numbers.safeParse({ scores: [1, false] }).success, false);
     });
 
     it('compiles optional array type', () => {
