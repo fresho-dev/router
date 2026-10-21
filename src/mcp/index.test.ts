@@ -16,14 +16,17 @@ const users = router(
   {
     get: route({
       description: 'List users',
-      query: { limit: 'number?' },
+      query: { limit: ['number?', 'Max results'] },
       handler: async (c) => ({ limit: c.query.limit ?? 10 }),
     }),
     post: route({
       description: 'Create a user',
       operationId: 'create_user',
-      body: { name: 'string', address: { city: 'string' }, tags: 'string[]?' },
-      descriptions: { name: 'Full name', 'address.city': 'City of residence' },
+      body: {
+        name: ['string', 'Full name'],
+        address: { city: ['string', 'City of residence'] },
+        tags: 'string[]?',
+      },
       mcp: { annotations: { destructiveHint: false } },
       handler: async (c) => c.body,
     }),
@@ -90,7 +93,7 @@ describe('mcp', () => {
     assert.strictEqual(tools[2].description, 'GET /users/{id}');
     assert.deepStrictEqual(tools[0].inputSchema, {
       type: 'object',
-      properties: { limit: { type: 'number' } },
+      properties: { limit: { type: 'number', description: 'Max results' } },
     });
     assert.deepStrictEqual(tools[1].inputSchema, {
       type: 'object',

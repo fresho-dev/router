@@ -37,7 +37,13 @@ import {
 import { router } from '../core.js';
 import { collectRoutes } from '../docs.js';
 import { type Middleware, type MiddlewareContext, runMiddleware } from '../middleware.js';
-import { type SchemaDefinition, toJsonSchema } from '../schema.js';
+import {
+  isNestedSchema,
+  type SchemaDefinition,
+  type SchemaField,
+  toJsonSchema,
+  unpackField,
+} from '../schema.js';
 import type { Context, Router, RouterRoutes, ToolAnnotations } from '../types.js';
 import { isRouter } from '../types.js';
 
@@ -135,7 +141,7 @@ function collectTools(root: Router<RouterRoutes>): Map<string, ToolRoute> {
     const required: string[] = [];
     const sources = new Map<string, ArgumentSource>();
     const add = (source: ArgumentSource, schema: SchemaDefinition) => {
-      const json = toJsonSchema(schema, route?.descriptions);
+      const json = toJsonSchema(schema);
       for (const [key, property] of Object.entries(json.properties)) {
         if (sources.has(key)) throw new Error(`Duplicate argument ${key} in tool ${name}`);
         sources.set(key, source);
@@ -147,9 +153,11 @@ function collectTools(root: Router<RouterRoutes>): Map<string, ToolRoute> {
     add('path', Object.fromEntries(params.map((p) => [p, 'string'])));
     if (route?.query) {
       // Query strings only carry scalars.
-      const scalars = Object.entries(route.query as SchemaDefinition).filter(
-        ([, type]) => typeof type === 'string' && !type.includes('[]'),
-      );
+      const scalars = Object.entries(route.query as SchemaDefinition).filter(([, field]) => {
+        if (isNestedSchema(field)) return false;
+        const [type] = unpackField(field as SchemaField);
+        return typeof type === 'string' && !type.includes('[]');
+      });
       add('query', Object.fromEntries(scalars));
     }
     const hasBodySchema = !!route?.body && METHODS_WITH_BODY.includes(method);

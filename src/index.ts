@@ -96,6 +96,7 @@ export {
   compileSchema,
   type InferSchema,
   type SchemaDefinition,
+  type SchemaField,
   type SchemaType,
   type SchemaTypeMap,
   type ValidationResult,

@@ -206,6 +206,36 @@ describe('types', () => {
       assert.ok(true);
     });
 
+    it('infers query and body types from [type, description] tuples in routes and clients', async () => {
+      const api = router({
+        messages: router({
+          post: route({
+            query: { folder: ['string?', 'Mailbox folder'] },
+            body: {
+              subject: ['string', 'Message subject'],
+              sender: { email: ['string', 'Sender address'] },
+            },
+            handler: async (c) => {
+              const folder: string | undefined = c.query.folder;
+              const subject: string = c.body.subject;
+              const email: string = c.body.sender.email;
+              return { folder: folder ?? 'INBOX', subject, email };
+            },
+          }),
+        }),
+      });
+
+      const local = createLocalClient(api);
+      const res = await local.messages.$post({
+        body: { subject: 'Hello', sender: { email: 'a@b.com' } },
+      });
+      assert.deepStrictEqual(res, {
+        folder: 'INBOX',
+        subject: 'Hello',
+        email: 'a@b.com',
+      });
+    });
+
     it('handles routes with path parameters at 4+ levels deep', () => {
       const api = router({
         api: router({
