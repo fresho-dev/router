@@ -9,7 +9,13 @@
  * - `get`, `post`, `put`, `patch`, `delete` = HTTP method handlers
  */
 
-import { type SchemaDefinition, toJsonSchema } from './schema.js';
+import {
+  isNestedSchema,
+  type SchemaDefinition,
+  type SchemaField,
+  toJsonSchema,
+  unpackField,
+} from './schema.js';
 import type { RouteDefinition, Router, RouterRoutes } from './types.js';
 import { HTTP_METHODS, isFunction, isRoute, isRouter } from './types.js';
 
@@ -80,14 +86,17 @@ export function generateDocs(config: {
     if (route?.query) {
       const querySchema = route.query as SchemaDefinition;
       operation.parameters = Object.entries(querySchema)
-        .filter(([, type]) => typeof type === 'string')
-        .map(([name, type]) => ({
-          name,
-          in: 'query',
-          required: !(type as string).endsWith('?'),
-          description: route.descriptions?.[name],
-          schema: { type: (type as string).replace('?', '').replace('[]', '') },
-        }));
+        .filter(([, field]) => !isNestedSchema(field))
+        .map(([name, field]) => {
+          const [type, description] = unpackField(field as SchemaField);
+          return {
+            name,
+            in: 'query',
+            required: !type.endsWith('?'),
+            description,
+            schema: { type: type.replace('?', '').replace('[]', '') },
+          };
+        });
     }
 
     // Add request body.
@@ -96,7 +105,7 @@ export function generateDocs(config: {
         required: true,
         content: {
           'application/json': {
-            schema: toJsonSchema(route.body as SchemaDefinition, route.descriptions),
+            schema: toJsonSchema(route.body as SchemaDefinition),
           },
         },
       };

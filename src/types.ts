@@ -161,8 +161,6 @@ export interface RouteDefinition<
   description?: string;
   /** Operation name, used as the OpenAPI `operationId` and the MCP tool name. */
   operationId?: string;
-  /** Field descriptions for docs and MCP, keyed by name (`address.city` for nested fields). */
-  descriptions?: Record<string, string>;
   /** MCP tool settings. */
   mcp?: { annotations?: ToolAnnotations };
   /** The request handler function. */

@@ -191,9 +191,8 @@ describe('docs', () => {
           test: router({
             post: route({
               operationId: 'create_test',
-              query: { dry: 'boolean?' },
-              body: { address: { city: 'string' } },
-              descriptions: { dry: 'Validate only', address: 'Home', 'address.city': 'City' },
+              query: { dry: ['boolean?', 'Validate only'] },
+              body: { address: { city: ['string', 'City'] } },
               handler: async () => ({}),
             }),
           }),
@@ -207,7 +206,6 @@ describe('docs', () => {
         operation.requestBody.content['application/json'].schema.properties.address,
         {
           type: 'object',
-          description: 'Home',
           properties: { city: { type: 'string', description: 'City' } },
           required: ['city'],
         },

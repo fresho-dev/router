@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import { describe, it } from 'node:test';
-import { compileSchema } from './schema.js';
+import { compileSchema, toJsonSchema } from './schema.js';
 
 describe('schema', () => {
   describe('compileSchema()', () => {
@@ -381,6 +381,75 @@ describe('schema', () => {
       });
       const result = schema.safeParse({ address: 'not-an-object' });
       assert.strictEqual(result.success, false);
+    });
+
+    it('compiles and infers [type, description] tuple fields', () => {
+      const schema = compileSchema({
+        name: ['string', 'User full name'],
+        age: ['number?', 'Optional age in years'],
+        tags: ['string[]?', 'Optional tags'],
+        address: {
+          city: ['string', 'City of residence'],
+        },
+      });
+
+      const result = schema.safeParse({
+        name: 'Alice',
+        age: '30',
+        address: { city: 'London' },
+      });
+      assert.strictEqual(result.success, true);
+      if (result.success) {
+        const name: string = result.data.name;
+        const age: number | undefined = result.data.age;
+        const tags: string[] | undefined = result.data.tags;
+        const city: string = result.data.address.city;
+        assert.strictEqual(name, 'Alice');
+        assert.strictEqual(age, 30);
+        assert.strictEqual(tags, undefined);
+        assert.strictEqual(city, 'London');
+      }
+
+      const missingRequired = schema.safeParse({ address: { city: 'London' } });
+      assert.strictEqual(missingRequired.success, false);
+    });
+
+    it('throws for invalid tuple definitions', () => {
+      assert.throws(
+        () => compileSchema({ field: ['invalid_type', 'desc'] as unknown as ['string', string] }),
+        /Unknown type/,
+      );
+      assert.throws(
+        () => compileSchema({ field: ['string'] as unknown as ['string', string] }),
+        /Invalid field definition/,
+      );
+    });
+
+    it('includes tuple descriptions in toJsonSchema', () => {
+      const json = toJsonSchema({
+        name: ['string', 'Full name'],
+        age: 'number?',
+        tags: ['string[]?', 'Labels'],
+        address: {
+          city: ['string', 'City of residence'],
+        },
+      });
+      assert.deepStrictEqual(json, {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Full name' },
+          age: { type: 'number' },
+          tags: { type: 'array', items: { type: 'string' }, description: 'Labels' },
+          address: {
+            type: 'object',
+            properties: {
+              city: { type: 'string', description: 'City of residence' },
+            },
+            required: ['city'],
+          },
+        },
+        required: ['name', 'address'],
+      });
     });
   });
 });

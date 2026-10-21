@@ -9,6 +9,7 @@
  * - Optional: `'string?'`, `'number?'`, `'boolean?'`
  * - Arrays: `'string[]'`, `'number[]'`, `'boolean[]'`
  * - Optional arrays: `'string[]?'`, `'number[]?'`, `'boolean[]?'`
+ * - Described fields: `['string', 'Description']`, `['number?', 'Optional count']`
  * - Nested objects: `{ field: { nested: 'string' } }`
  *
  * @example
@@ -17,9 +18,9 @@
  * const api = router({
  *   users: router({
  *     post: route({
- *       query: { page: 'number?', limit: 'number?' },
+ *       query: { page: 'number?', limit: ['number?', 'Max results'] },
  *       body: {
- *         name: 'string',
+ *         name: ['string', 'Full name'],
  *         age: 'number',
  *         tags: 'string[]?',
  *         address: { city: 'string', zip: 'string?' },
@@ -50,9 +51,12 @@ export type OptionalArrayType = 'string[]?' | 'number[]?' | 'boolean[]?' | 'unkn
 /** All supported type strings. */
 export type SchemaType = PrimitiveType | OptionalPrimitiveType | ArrayType | OptionalArrayType;
 
+/** A schema field: a type string, or a `[type, description]` tuple. */
+export type SchemaField = SchemaType | readonly [type: SchemaType, description: string];
+
 /** Schema definition using shorthand syntax. Supports nested objects. */
 export interface SchemaDefinition {
-  [key: string]: SchemaType | SchemaDefinition;
+  [key: string]: SchemaField | SchemaDefinition;
 }
 
 /** Maps primitive type strings to TypeScript types. */
@@ -76,14 +80,20 @@ export type SchemaTypeMap = {
 };
 
 /** Checks if a schema field type is optional (ends with ?). */
-type IsOptionalField<T> = T extends `${string}?` ? true : false;
+type IsOptionalField<T> = T extends `${string}?`
+  ? true
+  : T extends readonly [`${string}?`, string]
+    ? true
+    : false;
 
-/** Infers TypeScript type from a schema field (type string or nested object). */
+/** Infers TypeScript type from a schema field (type string, tuple, or nested object). */
 export type InferSchemaField<T> = T extends SchemaType
   ? SchemaTypeMap[T]
-  : T extends SchemaDefinition
-    ? InferSchema<T>
-    : never;
+  : T extends readonly [infer S extends SchemaType, string]
+    ? SchemaTypeMap[S]
+    : T extends SchemaDefinition
+      ? InferSchema<T>
+      : never;
 
 /** Gets keys of required fields (non-optional types). */
 type RequiredKeys<T extends SchemaDefinition> = {
@@ -125,9 +135,14 @@ export interface CompiledSchema<T> {
 /** Valid base types for primitives and arrays. */
 const PRIMITIVE_TYPES = ['string', 'number', 'boolean', 'unknown'];
 
-/** Checks if a schema field is a nested object (not a type string). */
-function isNestedSchema(field: SchemaType | SchemaDefinition): field is SchemaDefinition {
-  return typeof field === 'object' && field !== null;
+/** Checks if a schema field is a nested object (not a type string or [type, description] tuple). */
+export function isNestedSchema(field: SchemaField | SchemaDefinition): field is SchemaDefinition {
+  return typeof field === 'object' && field !== null && !Array.isArray(field);
+}
+
+/** Unpacks a schema field into its type string and optional description. */
+export function unpackField(field: SchemaField): [type: SchemaType, description?: string] {
+  return Array.isArray(field) ? [field[0], field[1]] : [field as SchemaType, undefined];
 }
 
 /**
@@ -180,7 +195,7 @@ function validatePrimitive(value: unknown, baseType: string): [boolean, unknown,
  */
 function validateField(
   key: string,
-  field: SchemaType | SchemaDefinition,
+  field: SchemaField | SchemaDefinition,
   value: unknown,
   parentPath: string = '',
 ): [boolean, unknown, Record<string, string[]>] {
@@ -198,8 +213,8 @@ function validateField(
     return [nestedResult.success, nestedResult.data, nestedResult.errors];
   }
 
-  // It's a type string.
-  const typeStr = field as string;
+  // Extract type string from field or [type, description] tuple.
+  const [typeStr] = unpackField(field);
   const isOptional = typeStr.endsWith('?');
   const isArray = typeStr.includes('[]');
 
@@ -287,7 +302,16 @@ function validateSchemaDefinition(schema: SchemaDefinition, path: string = ''): 
     if (isNestedSchema(field)) {
       validateSchemaDefinition(field, fieldPath);
     } else {
-      const typeStr = field as string;
+      if (
+        Array.isArray(field) &&
+        (field.length !== 2 || typeof field[0] !== 'string' || typeof field[1] !== 'string')
+      ) {
+        throw new Error(`Invalid field definition at '${fieldPath}'`);
+      }
+      const [typeStr] = unpackField(field);
+      if (typeof typeStr !== 'string') {
+        throw new Error(`Unknown type '${String(typeStr)}' at '${fieldPath}'`);
+      }
       const isOptional = typeStr.endsWith('?');
       let baseType = isOptional ? typeStr.slice(0, -1) : typeStr;
       baseType = baseType.replace('[]', '');
@@ -324,7 +348,7 @@ function validateSchemaDefinition(schema: SchemaDefinition, path: string = ''): 
  * }
  * ```
  */
-export function compileSchema<T extends SchemaDefinition>(
+export function compileSchema<const T extends SchemaDefinition>(
   schema: T,
 ): CompiledSchema<InferSchema<T>> {
   // Validate schema structure at compile time.
@@ -360,28 +384,20 @@ export interface JsonSchemaObject {
 
 /**
  * Converts a schema definition to JSON Schema, recursing into nested objects.
- *
- * @param descriptions - Field descriptions keyed by name, dotted for nested fields
- * @param prefix - Dotted path of `schema` within the root, for nested lookups
  */
-export function toJsonSchema(
-  schema: SchemaDefinition,
-  descriptions: Record<string, string> = {},
-  prefix = '',
-): JsonSchemaObject {
+export function toJsonSchema(schema: SchemaDefinition): JsonSchemaObject {
   const properties: Record<string, unknown> = {};
   const required: string[] = [];
   for (const [key, field] of Object.entries(schema)) {
-    const description = descriptions[`${prefix}${key}`];
-    const described = description === undefined ? {} : { description };
     if (isNestedSchema(field)) {
-      const nested = toJsonSchema(field, descriptions, `${prefix}${key}.`);
-      properties[key] = { ...nested, ...described };
+      properties[key] = toJsonSchema(field);
       required.push(key);
       continue;
     }
-    const optional = field.endsWith('?');
-    const base = optional ? field.slice(0, -1) : field;
+    const [typeStr, description] = unpackField(field);
+    const described = description === undefined ? {} : { description };
+    const optional = typeStr.endsWith('?');
+    const base = optional ? typeStr.slice(0, -1) : typeStr;
     const primitive = base.replace('[]', '');
     const item = primitive === 'unknown' ? {} : { type: primitive };
     properties[key] = base.endsWith('[]')
