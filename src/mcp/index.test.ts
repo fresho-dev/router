@@ -145,6 +145,16 @@ describe('mcp', () => {
     const created = await client.callTool({ name: 'create_user', arguments: body });
     assert.deepStrictEqual(JSON.parse(text(created)), body);
 
+    const withNullOptional = await client.callTool({
+      name: 'create_user',
+      arguments: { name: 'Ada', address: { city: 'London' }, tags: null },
+    });
+    assert.strictEqual(withNullOptional.isError, false);
+    assert.deepStrictEqual(JSON.parse(text(withNullOptional)), {
+      name: 'Ada',
+      address: { city: 'London' },
+    });
+
     const one = await client.callTool({ name: 'get_users_by_id', arguments: { id: 'a/b' } });
     assert.deepStrictEqual(JSON.parse(text(one)), { id: 'a/b', uid: 'u1' });
 
@@ -162,6 +172,13 @@ describe('mcp', () => {
     const invalid = await client.callTool({ name: 'create_user', arguments: {} });
     assert.strictEqual(invalid.isError, true);
     assert.match(text(invalid), /Invalid request body/);
+
+    const nullRequired = await client.callTool({
+      name: 'create_user',
+      arguments: { name: null, address: { city: 'London' } },
+    });
+    assert.strictEqual(nullRequired.isError, true);
+    assert.match(text(nullRequired), /Invalid request body/);
 
     const missing = await client.callTool({ name: 'get_users_by_id', arguments: {} });
     assert.strictEqual(missing.isError, true);

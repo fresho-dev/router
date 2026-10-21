@@ -137,11 +137,20 @@ function isNestedSchema(field: SchemaType | SchemaDefinition): field is SchemaDe
 function validatePrimitive(value: unknown, baseType: string): [boolean, unknown, string | null] {
   switch (baseType) {
     case 'string':
-      return [true, String(value), null];
+      if (typeof value !== 'string') {
+        return [false, undefined, 'Expected string'];
+      }
+      return [true, value, null];
 
     case 'number': {
+      if (
+        (typeof value !== 'number' && typeof value !== 'string') ||
+        (typeof value === 'string' && value.trim() === '')
+      ) {
+        return [false, undefined, 'Expected number'];
+      }
       const num = Number(value);
-      if (Number.isNaN(num)) {
+      if (!Number.isFinite(num)) {
         return [false, undefined, 'Expected number'];
       }
       return [true, num, null];
@@ -203,7 +212,7 @@ function validateField(
   }
 
   // Handle missing/empty values.
-  if (value === undefined || value === '') {
+  if (value === undefined || value === null || value === '') {
     if (!isOptional) {
       errors[fieldPath] = ['Required'];
       return [false, undefined, errors];
@@ -250,9 +259,10 @@ function validateSchema(
 ): { success: boolean; data: Record<string, unknown>; errors: Record<string, string[]> } {
   const result: Record<string, unknown> = {};
   const allErrors: Record<string, string[]> = {};
+  const source = typeof data === 'object' && data !== null && !Array.isArray(data) ? data : {};
 
   for (const [key, field] of Object.entries(schema)) {
-    const value = data[key];
+    const value = Object.hasOwn(source, key) ? source[key] : undefined;
     const [success, coerced, fieldErrors] = validateField(key, field, value, parentPath);
 
     if (!success) {
