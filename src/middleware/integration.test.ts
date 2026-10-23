@@ -610,7 +610,7 @@ describe('Middleware Integration', () => {
           session: router({
             get: route.ctx<{ cookies: Record<string, string>; setCookie: SetCookie }>()({
               handler: async (c) => {
-                const userId = c.cookies['user'] ?? 'generated';
+                const userId = c.cookies.user ?? 'generated';
                 c.setCookie('user', userId, { httpOnly: true, sameSite: 'lax', path: '/' });
                 c.setCookie('seen', '1');
                 return { userId };
@@ -645,7 +645,7 @@ describe('Middleware Integration', () => {
         {
           session: router({
             get: route.ctx<{ cookies: Record<string, string>; setCookie: SetCookie }>()({
-              handler: async (c) => ({ userId: c.cookies['user'] ?? 'generated' }),
+              handler: async (c) => ({ userId: c.cookies.user ?? 'generated' }),
             }),
           }),
         },

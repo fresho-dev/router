@@ -92,7 +92,9 @@ describe('OAuth State Encoding/Decoding', () => {
     assert.strictEqual(parsed.sig.length, 64);
     assert.match(parsed.sig, /^[0-9a-f]{64}$/);
 
-    const truncatedState = btoa(JSON.stringify({ payload: parsed.payload, sig: parsed.sig.slice(0, 16) }))
+    const truncatedState = btoa(
+      JSON.stringify({ payload: parsed.payload, sig: parsed.sig.slice(0, 16) }),
+    )
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
       .replace(/=/g, '');

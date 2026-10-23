@@ -92,7 +92,10 @@ describe('streaming', () => {
       });
 
       const text = await response.text();
-      assert.strictEqual(text, 'event: updatedata: injected\nid: 123event: spoofed\ndata: safe\n\n');
+      assert.strictEqual(
+        text,
+        'event: updatedata: injected\nid: 123event: spoofed\ndata: safe\n\n',
+      );
     });
 
     it('accepts custom headers', async () => {
