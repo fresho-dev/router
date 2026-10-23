@@ -81,6 +81,20 @@ describe('streaming', () => {
       assert.ok(text.includes('data: line3'));
     });
 
+    it('strips CR and LF from event and id fields', async () => {
+      const response = sseResponse(async (send, close) => {
+        send({
+          event: 'update\r\ndata: injected',
+          id: '123\r\nevent: spoofed',
+          data: 'safe',
+        });
+        close();
+      });
+
+      const text = await response.text();
+      assert.strictEqual(text, 'event: updatedata: injected\nid: 123event: spoofed\ndata: safe\n\n');
+    });
+
     it('accepts custom headers', async () => {
       const response = sseResponse(async (send, close) => close(), {
         headers: { 'X-Custom-Header': 'custom-value' },

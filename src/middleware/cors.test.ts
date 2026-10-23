@@ -100,7 +100,7 @@ describe('CORS Middleware', () => {
 
       middleware = cors({ origin: allowedOrigins });
       response = await middleware(context, next);
-      assert.strictEqual(response.headers.get('Access-Control-Allow-Origin'), 'false');
+      assert.strictEqual(response.headers.get('Access-Control-Allow-Origin'), null);
     });
 
     it('should handle origin regex', async () => {
@@ -129,7 +129,7 @@ describe('CORS Middleware', () => {
       });
 
       response = await middleware(context, next);
-      assert.strictEqual(response.headers.get('Access-Control-Allow-Origin'), 'false');
+      assert.strictEqual(response.headers.get('Access-Control-Allow-Origin'), null);
     });
 
     it('should handle origin function', async () => {
@@ -160,7 +160,7 @@ describe('CORS Middleware', () => {
       });
 
       response = await middleware(context, next);
-      assert.strictEqual(response.headers.get('Access-Control-Allow-Origin'), 'false');
+      assert.strictEqual(response.headers.get('Access-Control-Allow-Origin'), null);
     });
 
     it('should handle credentials option', async () => {
@@ -178,6 +178,23 @@ describe('CORS Middleware', () => {
       const response = await middleware(context, next);
 
       assert.strictEqual(response.headers.get('Access-Control-Allow-Credentials'), 'true');
+    });
+
+    it('should not emit wildcard origin alongside credentials on preflight', async () => {
+      context.request = new Request('http://example.com/test', {
+        method: 'OPTIONS',
+        headers: {
+          Origin: 'https://example.com',
+        },
+      });
+
+      const middleware = cors({
+        origin: '*',
+        credentials: true,
+      });
+      const response = await middleware(context, next);
+
+      assert.strictEqual(response.headers.get('Access-Control-Allow-Credentials'), null);
     });
 
     it('should handle custom methods and headers', async () => {
@@ -355,7 +372,7 @@ describe('CORS Middleware', () => {
       assert.strictEqual(response.headers.get('Access-Control-Allow-Origin'), '*');
     });
 
-    it('should handle requests without Origin header', async () => {
+    it('should omit Access-Control-Allow-Origin for requests without Origin when origin is not wildcard', async () => {
       context.request = new Request('http://example.com/test', {
         method: 'GET',
       });
@@ -363,7 +380,21 @@ describe('CORS Middleware', () => {
       const middleware = cors({ origin: 'https://example.com' });
       const response = await middleware(context, next);
 
-      assert.strictEqual(response.headers.get('Access-Control-Allow-Origin'), '*');
+      assert.strictEqual(response.headers.get('Access-Control-Allow-Origin'), null);
+    });
+
+    it('should omit Access-Control-Allow-Origin for disallowed origin on actual requests', async () => {
+      context.request = new Request('http://example.com/test', {
+        method: 'GET',
+        headers: {
+          Origin: 'https://evil.com',
+        },
+      });
+
+      const middleware = cors({ origin: 'https://example.com' });
+      const response = await middleware(context, next);
+
+      assert.strictEqual(response.headers.get('Access-Control-Allow-Origin'), null);
     });
   });
 

@@ -89,6 +89,14 @@ describe('Cookies Middleware', () => {
       assert.strictEqual(serializeCookie('a', '1', { sameSite: 'lax' }), 'a=1; SameSite=Lax');
       assert.strictEqual(serializeCookie('a', '1', { sameSite: 'none' }), 'a=1; SameSite=None');
     });
+
+    it('should strip CR, LF, and semicolons from name, domain, and path', () => {
+      const serialized = serializeCookie('ses\r\n;sion', 'abc', {
+        domain: 'example.com;\r\nEvil=1',
+        path: '/app\r\n;injected',
+      });
+      assert.strictEqual(serialized, 'session=abc; Domain=example.comEvil=1; Path=/appinjected');
+    });
   });
 
   describe('cookies()', () => {

@@ -78,7 +78,8 @@ export function parseCookies(header: string | null): Record<string, string> {
  * The value is URL-encoded; attributes are appended in a stable order.
  */
 export function serializeCookie(name: string, value: string, options: CookieOptions = {}): string {
-  const parts = [`${name}=${encodeURIComponent(value)}`];
+  const safeName = name.replace(/[\r\n;]/g, '');
+  const parts = [`${safeName}=${encodeURIComponent(value)}`];
 
   // Attributes, in the conventional Set-Cookie order.
   if (options.maxAge !== undefined) {
@@ -88,10 +89,10 @@ export function serializeCookie(name: string, value: string, options: CookieOpti
     parts.push(`Expires=${options.expires.toUTCString()}`);
   }
   if (options.domain) {
-    parts.push(`Domain=${options.domain}`);
+    parts.push(`Domain=${options.domain.replace(/[\r\n;]/g, '')}`);
   }
   if (options.path) {
-    parts.push(`Path=${options.path}`);
+    parts.push(`Path=${options.path.replace(/[\r\n;]/g, '')}`);
   }
   if (options.secure) {
     parts.push('Secure');

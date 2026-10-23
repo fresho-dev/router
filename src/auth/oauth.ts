@@ -197,6 +197,7 @@ export interface RevokeTokenOptions {
 export async function encodeOAuthState(
   data: Record<string, unknown>,
   secret: string,
+  ttlMs = 600_000,
 ): Promise<string> {
   // Generate random nonce.
   const nonceBytes = new Uint8Array(12);
@@ -206,8 +207,8 @@ export async function encodeOAuthState(
     .replace(/\//g, '_')
     .replace(/=/g, '');
 
-  // Create payload with nonce.
-  const payload = JSON.stringify({ ...data, _nonce: nonce });
+  const exp = typeof data._exp === 'number' ? data._exp : Date.now() + ttlMs;
+  const payload = JSON.stringify({ ...data, _nonce: nonce, _exp: exp });
 
   // Generate HMAC signature.
   const encoder = new TextEncoder();
@@ -222,8 +223,7 @@ export async function encodeOAuthState(
   const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
   const signatureHex = Array.from(new Uint8Array(signature))
     .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-    .slice(0, 16);
+    .join('');
 
   // Encode the full state.
   const stateData = JSON.stringify({ payload, sig: signatureHex });
@@ -256,6 +256,14 @@ export async function decodeOAuthState<T extends Record<string, unknown> = Recor
     const stateData = JSON.parse(atob(padded));
 
     const { payload, sig } = stateData;
+    if (typeof payload !== 'string' || typeof sig !== 'string' || !/^[0-9a-f]{64}$/i.test(sig)) {
+      return null;
+    }
+
+    const sigBytes = new Uint8Array(32);
+    for (let i = 0; i < 32; i++) {
+      sigBytes[i] = Number.parseInt(sig.slice(i * 2, i * 2 + 2), 16);
+    }
 
     // Verify HMAC signature.
     const encoder = new TextEncoder();
@@ -264,23 +272,20 @@ export async function decodeOAuthState<T extends Record<string, unknown> = Recor
       encoder.encode(secret),
       { name: 'HMAC', hash: 'SHA-256' },
       false,
-      ['sign'],
+      ['verify'],
     );
 
-    const expectedSignature = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
-    const expectedSigHex = Array.from(new Uint8Array(expectedSignature))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('')
-      .slice(0, 16);
-
-    // Constant-time comparison (simple version).
-    if (sig !== expectedSigHex) {
+    const valid = await crypto.subtle.verify('HMAC', key, sigBytes, encoder.encode(payload));
+    if (!valid) {
       return null;
     }
 
-    // Extract data from payload (remove internal _nonce field).
     const payloadData = JSON.parse(payload);
+    if (typeof payloadData._exp !== 'number' || Date.now() >= payloadData._exp) {
+      return null;
+    }
     delete payloadData._nonce;
+    delete payloadData._exp;
     return payloadData as T;
   } catch {
     return null;

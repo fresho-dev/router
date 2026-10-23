@@ -30,32 +30,32 @@ export interface CorsOptions {
 function getAllowedOrigin(
   requestOrigin: string | null,
   configOrigin: CorsOptions['origin'],
-): string {
-  if (!requestOrigin) {
-    return '*';
-  }
-
+): string | false {
   if (!configOrigin || configOrigin === '*') {
     return '*';
   }
 
+  if (!requestOrigin) {
+    return false;
+  }
+
   if (typeof configOrigin === 'string') {
-    return configOrigin === requestOrigin ? configOrigin : 'false';
+    return configOrigin === requestOrigin ? configOrigin : false;
   }
 
   if (Array.isArray(configOrigin)) {
-    return configOrigin.includes(requestOrigin) ? requestOrigin : 'false';
+    return configOrigin.includes(requestOrigin) ? requestOrigin : false;
   }
 
   if (configOrigin instanceof RegExp) {
-    return configOrigin.test(requestOrigin) ? requestOrigin : 'false';
+    return configOrigin.test(requestOrigin) ? requestOrigin : false;
   }
 
   if (typeof configOrigin === 'function') {
-    return configOrigin(requestOrigin) ? requestOrigin : 'false';
+    return configOrigin(requestOrigin) ? requestOrigin : false;
   }
 
-  return 'false';
+  return false;
 }
 
 /**
@@ -86,10 +86,13 @@ export function cors(options: CorsOptions = {}): Middleware {
     // Handle preflight request
     if (request.method === 'OPTIONS') {
       const headers: Record<string, string> = {
-        'Access-Control-Allow-Origin': allowedOrigin,
         'Access-Control-Allow-Methods': config.methods.join(', '),
         Vary: 'Origin',
       };
+
+      if (allowedOrigin) {
+        headers['Access-Control-Allow-Origin'] = allowedOrigin;
+      }
 
       if (config.allowedHeaders.length > 0) {
         const requestHeaders = request.headers.get('Access-Control-Request-Headers');
@@ -110,7 +113,7 @@ export function cors(options: CorsOptions = {}): Middleware {
         headers['Access-Control-Expose-Headers'] = config.exposedHeaders.join(', ');
       }
 
-      if (config.credentials) {
+      if (config.credentials && allowedOrigin && allowedOrigin !== '*') {
         headers['Access-Control-Allow-Credentials'] = 'true';
       }
 
@@ -146,10 +149,12 @@ export function cors(options: CorsOptions = {}): Middleware {
 
     // Add CORS headers to response
     const headers = new Headers(response.headers);
-    headers.set('Access-Control-Allow-Origin', allowedOrigin);
+    if (allowedOrigin) {
+      headers.set('Access-Control-Allow-Origin', allowedOrigin);
+    }
     headers.set('Vary', 'Origin');
 
-    if (config.credentials && allowedOrigin !== '*') {
+    if (config.credentials && allowedOrigin && allowedOrigin !== '*') {
       headers.set('Access-Control-Allow-Credentials', 'true');
     }
 

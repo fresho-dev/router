@@ -178,8 +178,14 @@ export function createHandler<T extends RouterRoutes>(routerDef: Router<T>): Fet
 
       // Extract path parameters.
       const path: Record<string, string> = {};
+      let invalidPath = false;
       for (let i = 0; i < compiled.paramNames.length; i++) {
-        path[compiled.paramNames[i]] = decodeURIComponent(match[i + 1]);
+        try {
+          path[compiled.paramNames[i]] = decodeURIComponent(match[i + 1]);
+        } catch {
+          invalidPath = true;
+          break;
+        }
       }
 
       // Create middleware context.
@@ -194,6 +200,7 @@ export function createHandler<T extends RouterRoutes>(routerDef: Router<T>): Fet
 
       // Run middleware and handler.
       if (
+        invalidPath ||
         compiled.middleware.length > 0 ||
         compiled.handler ||
         compiled.querySchema ||
@@ -201,6 +208,12 @@ export function createHandler<T extends RouterRoutes>(routerDef: Router<T>): Fet
       ) {
         const response = await runMiddleware(compiled.middleware, context, async () => {
           const routeId = `${compiled.method} ${url.pathname}`;
+          if (invalidPath) {
+            return Response.json(
+              { error: 'Invalid path parameters', route: routeId },
+              { status: 400 },
+            );
+          }
 
           // Validate query params.
           let query: unknown = {};

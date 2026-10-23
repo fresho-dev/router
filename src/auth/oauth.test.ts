@@ -72,13 +72,37 @@ describe('OAuth State Encoding/Decoding', () => {
     assert.deepStrictEqual(decoded, data);
   });
 
-  it('should not expose internal _nonce in decoded data', async () => {
+  it('should not expose internal _nonce or _exp in decoded data', async () => {
     const data = { uid: 'user-123' };
     const state = await encodeOAuthState(data, SECRET);
     const decoded = await decodeOAuthState(state, SECRET);
 
     assert.ok(decoded);
     assert.strictEqual('_nonce' in decoded, false);
+    assert.strictEqual('_exp' in decoded, false);
+  });
+
+  it('should use full 64-char hex HMAC-SHA256 digest and reject truncated signatures', async () => {
+    const data = { uid: 'user-123' };
+    const state = await encodeOAuthState(data, SECRET);
+    const base64 = state.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+    const parsed = JSON.parse(atob(padded)) as { payload: string; sig: string };
+
+    assert.strictEqual(parsed.sig.length, 64);
+    assert.match(parsed.sig, /^[0-9a-f]{64}$/);
+
+    const truncatedState = btoa(JSON.stringify({ payload: parsed.payload, sig: parsed.sig.slice(0, 16) }))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+    assert.strictEqual(await decodeOAuthState(truncatedState, SECRET), null);
+  });
+
+  it('should return null for expired state', async () => {
+    const expiredState = await encodeOAuthState({ uid: 'user-123' }, SECRET, -1000);
+    const decoded = await decodeOAuthState(expiredState, SECRET);
+    assert.strictEqual(decoded, null);
   });
 });
 

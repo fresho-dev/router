@@ -138,11 +138,11 @@ function formatSSEMessage(message: SSEMessage): string {
   const lines: string[] = [];
 
   if (message.event) {
-    lines.push(`event: ${message.event}`);
+    lines.push(`event: ${message.event.replace(/[\r\n]/g, '')}`);
   }
 
   if (message.id) {
-    lines.push(`id: ${message.id}`);
+    lines.push(`id: ${message.id.replace(/[\r\n]/g, '')}`);
   }
 
   if (message.retry !== undefined) {

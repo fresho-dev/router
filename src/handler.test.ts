@@ -769,6 +769,21 @@ describe('standalone router', () => {
       assert.strictEqual(res.status, 200);
       assert.deepStrictEqual(await res.json(), { userId: 'user@example.com' });
     });
+
+    it('returns 400 for malformed percent-encoded path parameters', async () => {
+      const handler = createHandler(
+        router({
+          users: router({
+            $id: router({
+              get: async (c) => Response.json({ userId: c.path.id }),
+            }),
+          }),
+        }),
+      );
+
+      const res = await handler(new Request('http://localhost/users/%E0%A4%A'));
+      assert.strictEqual(res.status, 400);
+    });
   });
 
   describe('middleware to handler context passing', () => {
