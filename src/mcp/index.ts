@@ -30,6 +30,7 @@ import {
   CallToolRequestSchema,
   type CallToolResult,
   ErrorCode,
+  type Icon,
   ListToolsRequestSchema,
   McpError,
   type Tool,
@@ -61,6 +62,12 @@ export interface McpOptions {
   name: string;
   /** Server version reported to clients. */
   version: string;
+  /** Display name for clients' UI. */
+  title?: string;
+  /** Icons for clients' UI. */
+  icons?: Icon[];
+  /** Home page of the server or its product. */
+  websiteUrl?: string;
   /** Instructions for agents on how to use the tools. */
   instructions?: string;
   /** Advertise OAuth: 401s gain a `resource_metadata` challenge and metadata is served. */
@@ -264,7 +271,13 @@ async function serve(
   c: Context,
 ): Promise<Response> {
   const server = new Server(
-    { name: options.name, version: options.version },
+    {
+      name: options.name,
+      version: options.version,
+      title: options.title,
+      icons: options.icons,
+      websiteUrl: options.websiteUrl,
+    },
     { capabilities: { tools: {} }, instructions: options.instructions },
   );
   server.setRequestHandler(ListToolsRequestSchema, () => ({
