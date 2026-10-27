@@ -413,6 +413,8 @@ const api = router({
 
 `mcp()` requires endpoint middleware (usually auth). Pass `public: true` instead when the endpoint is open, or already guarded by middleware on its parent routers.
 
+Besides `name` and `version`, the options take `instructions` for agents and `title`, `icons` (`{ src, mimeType?, sizes? }`) and `websiteUrl`, which clients may show in their UI.
+
 - **Tools** — one per route, named from the method and path (`get_users`, `post_users`, `get_users_by_id`, ...) unless the route sets `operationId` (also used in OpenAPI). Descriptions come from `route.description`.
 - **Arguments** — flat: path params, query fields and body fields side by side (`{ id, text }`), as JSON Schema derived from the route's schemas. Names must be unique across the three; a clash throws when `mcp()` is called. Use `[type, description]` tuples (e.g. `{ folder: ['string?', 'Mailbox folder'] }`) in `query` and `body` schemas to document fields for agents and OpenAPI. Array query params are left out, since the router can't parse them from query strings. Without a body schema, `post`/`put`/`patch` tools send any other arguments as the body.
 - **Annotations** — `get` tools are marked `readOnlyHint`, `delete` tools `destructiveHint` and `idempotentHint`, and `put` tools `idempotentHint`, so clients can decide when to ask for confirmation. Override per route with `mcp: { annotations: { ... } }`.

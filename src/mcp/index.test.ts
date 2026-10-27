@@ -43,7 +43,15 @@ const app = router({
   users,
   mcp: mcp(
     { users },
-    { name: 'test', version: '1.0.0', instructions: 'Use the tools.', public: true },
+    {
+      name: 'test',
+      version: '1.0.0',
+      title: 'Test API',
+      icons: [{ src: 'https://example.com/icon.png', mimeType: 'image/png', sizes: ['192x192'] }],
+      websiteUrl: 'https://example.com',
+      instructions: 'Use the tools.',
+      public: true,
+    },
   ),
   secure: router({
     mcp: mcp(
@@ -133,7 +141,13 @@ describe('mcp', () => {
   it('passes instructions and server info', async () => {
     const client = await connect();
     assert.strictEqual(client.getInstructions(), 'Use the tools.');
-    assert.deepStrictEqual(client.getServerVersion(), { name: 'test', version: '1.0.0' });
+    assert.deepStrictEqual(client.getServerVersion(), {
+      name: 'test',
+      version: '1.0.0',
+      title: 'Test API',
+      icons: [{ src: 'https://example.com/icon.png', mimeType: 'image/png', sizes: ['192x192'] }],
+      websiteUrl: 'https://example.com',
+    });
   });
 
   it('calls routes with query, body and path arguments', async () => {
