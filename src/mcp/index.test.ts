@@ -374,6 +374,8 @@ describe('mcp', () => {
   });
 
   describe('hardening', () => {
+    // Every byte value, longer than one encoding chunk.
+    const pixels = Uint8Array.from({ length: 100_000 }, (_, i) => i % 256);
     const uid = (c: unknown) => (c as { uid?: string }).uid ?? null;
     const profile = router({ get: async (c) => ({ uid: uid(c) }) });
     const inner = router({
@@ -389,6 +391,16 @@ describe('mcp', () => {
           }),
       }),
       headers: router({ get: async (c) => Object.fromEntries(c.request.headers) }),
+      media: router({
+        get: route({
+          query: { type: 'string', status: 'number?' },
+          handler: async (c) => {
+            const status = c.query.status ?? 201;
+            const body = status === 204 ? null : pixels;
+            return new Response(body, { status, headers: { 'Content-Type': c.query.type } });
+          },
+        }),
+      }),
       search: router({
         get: route({ query: { q: 'string?' }, handler: async (c) => ({ q: c.query.q }) }),
       }),
@@ -446,6 +458,33 @@ describe('mcp', () => {
       const result = await call('/mcp', 'get_inner_events', {});
       assert.strictEqual(result.isError, true);
       assert.match(text(result), /Streaming responses are not supported/);
+    });
+
+    it('returns image and audio responses as media content', async () => {
+      const cases = [
+        ['image/png', 201, 'image', 'image/png'],
+        ['IMAGE/JPEG; charset=binary', 201, 'image', 'image/jpeg'],
+        ['audio/wav', 201, 'audio', 'audio/wav'],
+        ['image/png', 500, 'image', 'image/png'],
+      ] as const;
+      for (const [type, status, kind, mimeType] of cases) {
+        const result = await call('/mcp', 'get_inner_media', { type, status });
+        assert.strictEqual(result.isError, status >= 400);
+        assert.strictEqual(result.structuredContent, undefined);
+        const content = result.content as { type: string; data: string; mimeType: string }[];
+        assert.strictEqual(content.length, 1);
+        assert.strictEqual(content[0].type, kind);
+        assert.strictEqual(content[0].mimeType, mimeType);
+        assert.deepStrictEqual(new Uint8Array(Buffer.from(content[0].data, 'base64')), pixels);
+      }
+    });
+
+    it('returns SVG and empty media responses as text', async () => {
+      const svg = await call('/mcp', 'get_inner_media', { type: 'image/svg+xml' });
+      assert.strictEqual((svg.content as { type: string }[])[0].type, 'text');
+      const empty = await call('/mcp', 'get_inner_media', { type: 'image/png', status: 204 });
+      assert.strictEqual(empty.isError, false);
+      assert.deepStrictEqual(empty.content, [{ type: 'text', text: '' }]);
     });
 
     it('rejects non-scalar query arguments', async () => {

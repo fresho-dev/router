@@ -107,6 +107,8 @@ const DROPPED_HEADERS = [
   'Upgrade',
 ];
 const STREAMING_TYPES = /^(text\/event-stream|application\/x-ndjson)/i;
+// SVG and other XML stay text, since models read it but clients reject it as an image.
+const MEDIA_TYPES = /^(image|audio)\/(?![^;]*\+xml)/i;
 const TOOL_NAME = /^[A-Za-z0-9_-]{1,128}$/;
 const DEFAULT_ANNOTATIONS: Record<string, ToolAnnotations> = {
   get: { readOnlyHint: true },
@@ -123,6 +125,15 @@ function parseJson(text: string): unknown {
   } catch {
     return undefined;
   }
+}
+
+/** Base64 encodes bytes in chunks, since spreading large arrays overflows the stack. */
+function base64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
 }
 
 /** Builds a tool name such as `get_users_by_id` from a method and `{param}` path. */
@@ -248,13 +259,20 @@ async function callTool(
     console.error(`Error in MCP tool ${target.tool.name}:`, error);
     return fail('Internal error');
   }
-  if (STREAMING_TYPES.test(response.headers.get('Content-Type') ?? '')) {
+  const contentType = response.headers.get('Content-Type') ?? '';
+  if (STREAMING_TYPES.test(contentType)) {
     await response.body?.cancel();
     return fail('Streaming responses are not supported');
   }
-  const text = await response.text();
+  const bytes = MEDIA_TYPES.test(contentType) && new Uint8Array(await response.arrayBuffer());
+  if (bytes && bytes.length > 0) {
+    const mimeType = contentType.split(';')[0].trim().toLowerCase();
+    const type = mimeType.startsWith('image/') ? 'image' : 'audio';
+    return { content: [{ type, data: base64(bytes), mimeType }], isError: !response.ok };
+  }
+  const text = bytes ? '' : await response.text();
   const result: CallToolResult = { content: [{ type: 'text', text }], isError: !response.ok };
-  if (/^application\/json/i.test(response.headers.get('Content-Type') ?? '')) {
+  if (/^application\/json/i.test(contentType)) {
     const value = parseJson(text);
     if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
       result.structuredContent = value as Record<string, unknown>;
