@@ -340,6 +340,8 @@ describe('mcp', () => {
   });
 
   describe('hardening', () => {
+    // Every byte value, longer than one encoding chunk.
+    const pixels = Uint8Array.from({ length: 100_000 }, (_, i) => i % 256);
     const uid = (c: unknown) => (c as { uid?: string }).uid ?? null;
     const profile = router({ get: async (c) => ({ uid: uid(c) }) });
     const inner = router({
@@ -355,6 +357,13 @@ describe('mcp', () => {
           }),
       }),
       headers: router({ get: async (c) => Object.fromEntries(c.request.headers) }),
+      media: router({
+        get: route({
+          query: { type: 'string' },
+          handler: async (c) =>
+            new Response(pixels, { status: 201, headers: { 'Content-Type': c.query.type } }),
+        }),
+      }),
       search: router({
         get: route({ query: { q: 'string?' }, handler: async (c) => ({ q: c.query.q }) }),
       }),
@@ -412,6 +421,24 @@ describe('mcp', () => {
       const result = await call('/mcp', 'get_inner_events', {});
       assert.strictEqual(result.isError, true);
       assert.match(text(result), /Streaming responses are not supported/);
+    });
+
+    it('returns image and audio responses as media content', async () => {
+      const cases = [
+        ['image/png', 'image', 'image/png'],
+        ['IMAGE/JPEG; charset=binary', 'image', 'image/jpeg'],
+        ['audio/wav', 'audio', 'audio/wav'],
+      ];
+      for (const [type, kind, mimeType] of cases) {
+        const result = await call('/mcp', 'get_inner_media', { type });
+        assert.strictEqual(result.isError, false);
+        assert.strictEqual(result.structuredContent, undefined);
+        const content = result.content as { type: string; data: string; mimeType: string }[];
+        assert.strictEqual(content.length, 1);
+        assert.strictEqual(content[0].type, kind);
+        assert.strictEqual(content[0].mimeType, mimeType);
+        assert.deepStrictEqual(new Uint8Array(Buffer.from(content[0].data, 'base64')), pixels);
+      }
     });
 
     it('rejects non-scalar query arguments', async () => {
