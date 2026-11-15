@@ -94,7 +94,8 @@ const DROPPED_HEADERS = [
   'Upgrade',
 ];
 const STREAMING_TYPES = /^(text\/event-stream|application\/x-ndjson)/i;
-const MEDIA_TYPES = /^(image|audio)\//i;
+// SVG and other XML stay text, since models read it but clients reject it as an image.
+const MEDIA_TYPES = /^(image|audio)\/(?![^;]*\+xml)/i;
 const TOOL_NAME = /^[A-Za-z0-9_-]{1,128}$/;
 const DEFAULT_ANNOTATIONS: Record<string, ToolAnnotations> = {
   get: { readOnlyHint: true },
@@ -248,13 +249,13 @@ async function callTool(
     await response.body?.cancel();
     return fail('Streaming responses are not supported');
   }
-  if (MEDIA_TYPES.test(contentType)) {
+  const bytes = MEDIA_TYPES.test(contentType) && new Uint8Array(await response.arrayBuffer());
+  if (bytes && bytes.length > 0) {
     const mimeType = contentType.split(';')[0].trim().toLowerCase();
-    const data = base64(new Uint8Array(await response.arrayBuffer()));
     const type = mimeType.startsWith('image/') ? 'image' : 'audio';
-    return { content: [{ type, data, mimeType }], isError: !response.ok };
+    return { content: [{ type, data: base64(bytes), mimeType }], isError: !response.ok };
   }
-  const text = await response.text();
+  const text = bytes ? '' : await response.text();
   const result: CallToolResult = { content: [{ type: 'text', text }], isError: !response.ok };
   if (/^application\/json/i.test(contentType)) {
     const value = parseJson(text);
